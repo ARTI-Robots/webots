@@ -29,6 +29,7 @@
 #include "../../controller/c/messages.h"
 
 #include <QtCore/QDataStream>
+#include <cstdio>
 
 #include <wren/config.h>
 #include <wren/dynamic_mesh.h>
@@ -346,6 +347,31 @@ void WbLidar::copyAllLayersToMemoryMappedFile() {
     skip = (double)(height() - 1) / (double)(actualNumberOfLayers() - 1);
   double w = width();
   int resolution = actualHorizontalResolution();
+
+  /*added changes*/
+
+  static bool debugMappingPrinted = false;
+  if (!debugMappingPrinted) {
+    std::fprintf(stderr,
+                "[RGB-LIDAR DEBUG] render=%dx%d final=%dx%d skip=%.6f rotating=%d\n",
+                width(),
+                height(),
+                resolution,
+                actualNumberOfLayers(),
+                skip,
+                mIsActuallyRotating ? 1 : 0);
+
+    for (int layer = 0; layer < actualNumberOfLayers(); ++layer)
+      std::fprintf(stderr,
+                  "[RGB-LIDAR DEBUG] layer %d -> source row %d\n",
+                  layer,
+                  static_cast<int>(layer * skip));
+
+    debugMappingPrinted = true;
+  }
+
+  /*end*/
+
   int minWidth = 0;
   int maxWidth = w;
   int widthOffset = 0;
