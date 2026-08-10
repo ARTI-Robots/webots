@@ -48,6 +48,7 @@ void WbLidar::init() {
   mPreviousRotatingAngle = 0;
   mCurrentTiltAngle = 0;
   mTemporaryImage = NULL;
+  mRgbWrenCamera = NULL;
 
   mTiltAngle = findSFDouble("tiltAngle");
   mHorizontalResolution = findSFInt("horizontalResolution");
@@ -107,6 +108,7 @@ WbLidar::WbLidar(const WbNode &other) : WbAbstractCamera(other) {
 
 WbLidar::~WbLidar() {
   delete mTemporaryImage;
+  delete mRgbWrenCamera;
   if (mIsRemoteExternController) {
     if (mIsPointCloudEnabled)
       delete mTcpCloudPoints;
@@ -168,6 +170,9 @@ void WbLidar::reset(const QString &id) {
   if (mWrenCamera)
     mWrenCamera->rotateYaw(-mCurrentRotatingAngle);
 
+  if (mRgbWrenCamera)
+    mRgbWrenCamera->rotateYaw(-mCurrentRotatingAngle);
+
   mIsPointCloudEnabled = false;
   mCurrentRotatingAngle = 0;
   mPreviousRotatingAngle = 0;
@@ -217,6 +222,8 @@ void WbLidar::prePhysicsStep(double ms) {
       s->rotate(WbVector3(0.0, 0.0, angle));
     if (hasBeenSetup()) {
       mWrenCamera->rotateYaw(angle);
+      if (mRgbWrenCamera)
+        mRgbWrenCamera->rotateYaw(angle);
       mPreviousRotatingAngle = mCurrentRotatingAngle;
       mCurrentRotatingAngle += angle;
     }
@@ -495,6 +502,42 @@ float *WbLidar::lidarImage() const {
   return reinterpret_cast<float *>(image());
 }
 
+void WbLidar::render() {
+  if (!mRgbWrenCamera)
+    return;
+
+  mRgbWrenCamera->render();
+
+  static bool debugRgbPrinted = false;
+  if (!debugRgbPrinted) {
+    const int y = height() / 2;
+    const int xSamples[] = {
+      0,
+      width() / 4,
+      width() / 2,
+      3 * width() / 4,
+      width() - 1
+    };
+
+    std::fprintf(stderr,
+                 "[RGB-LIDAR DEBUG] RGB merged image samples at row %d:\n",
+                 y);
+
+    for (const int x : xSamples) {
+      const WbRgb color = mRgbWrenCamera->copyPixelColourValue(x, y);
+
+      std::fprintf(stderr,
+                   "[RGB-LIDAR DEBUG] x=%d RGB=(%d,%d,%d)\n",
+                   x,
+                   static_cast<int>(color.redByte()),
+                   static_cast<int>(color.greenByte()),
+                   static_cast<int>(color.blueByte()));
+    }
+
+    debugRgbPrinted = true;
+  }
+}
+
 void WbLidar::createWrenCamera() {
   mActualNumberOfLayers = mNumberOfLayers->value();
   mActualHorizontalResolution = mHorizontalResolution->value();
@@ -509,6 +552,30 @@ void WbLidar::createWrenCamera() {
   applyTiltAngleToWren();
   updateOrientation();
   connect(mWrenCamera, &WbWrenCamera::cameraInitialized, this, &WbLidar::updateOrientation);
+
+  delete mRgbWrenCamera;
+
+  mRgbWrenCamera =
+    new WbWrenCamera(wrenNode(),
+                    width(),
+                    height(),
+                    nearValue(),
+                    minRange(),
+                    maxRange(),
+                    fieldOfView(),
+                    'c',
+                    false,
+                    mProjection->value());
+
+  mRgbWrenCamera->rotatePitch(mTiltAngle->value());
+  mRgbWrenCamera->rotateRoll(M_PI_2);
+  mRgbWrenCamera->rotateYaw(-M_PI_2);
+
+  std::fprintf(stderr,
+              "[RGB-LIDAR DEBUG] RGB companion created: render=%dx%d\n",
+              width(),
+              height());
+
 }
 
 void WbLidar::updateOrientation() {
