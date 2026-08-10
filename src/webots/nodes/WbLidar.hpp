@@ -101,6 +101,7 @@ private:
   double mCurrentTiltAngle;
   float *mTemporaryImage;
   WbWrenCamera *mRgbWrenCamera;
+  unsigned char *mRgbTemporaryImage;
   float *mTcpImage;
   WbLidarPoint *mTcpCloudPoints;
 
