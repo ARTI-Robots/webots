@@ -68,6 +68,16 @@ public:
   bool isSubCameraActive(int cameraIndex) const { return mIsCameraActive[cameraIndex]; }
   WrViewport *getSubViewport(int cameraIndex) const { return mCameraViewport[cameraIndex]; }
 
+  WrCamera *getSubCamera(int cameraIndex) const {
+    return mIsCameraActive[cameraIndex] ? mCamera[cameraIndex] : NULL;
+  }
+
+  WrFrameBuffer *getSubFrameBuffer(int cameraIndex) const {
+    return mIsCameraActive[cameraIndex] && !isPlanarProjection() ?
+            mCameraFrameBuffer[cameraIndex] :
+            NULL;
+  }
+
   WrTexture *getWrenTexture() const;
   int textureGLId() const;
 

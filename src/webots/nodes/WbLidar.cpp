@@ -509,6 +509,49 @@ void WbLidar::createWrenCamera() {
   applyTiltAngleToWren();
   updateOrientation();
   connect(mWrenCamera, &WbWrenCamera::cameraInitialized, this, &WbLidar::updateOrientation);
+
+  static bool debugSubCamerasPrinted = false;
+
+  if (!debugSubCamerasPrinted) {
+    const char *orientationNames[] = {
+      "FRONT",
+      "RIGHT",
+      "BACK",
+      "LEFT",
+      "UP",
+      "DOWN"
+    };
+
+    std::fprintf(stderr,
+                "[RGB-LIDAR WREN] projection=%s fov=%.6f render=%dx%d\n",
+                mProjection->value().toUtf8().constData(),
+                actualFieldOfView(),
+                width(),
+                height());
+
+    for (int i = 0;
+        i < WbWrenCamera::CAMERA_ORIENTATION_COUNT;
+        ++i) {
+      const bool active =
+        mWrenCamera->isSubCameraActive(i);
+
+      const bool cameraExists =
+        mWrenCamera->getSubCamera(i) != NULL;
+
+      const bool frameBufferExists =
+        mWrenCamera->getSubFrameBuffer(i) != NULL;
+
+      std::fprintf(
+        stderr,
+        "[RGB-LIDAR WREN] %-5s active=%d camera=%d framebuffer=%d\n",
+        orientationNames[i],
+        active ? 1 : 0,
+        cameraExists ? 1 : 0,
+        frameBufferExists ? 1 : 0);
+    }
+
+    debugSubCamerasPrinted = true;
+  }
 }
 
 void WbLidar::updateOrientation() {
