@@ -48,9 +48,6 @@ void WbLidar::init() {
   mPreviousRotatingAngle = 0;
   mCurrentTiltAngle = 0;
   mTemporaryImage = NULL;
-  mRgbWrenCamera = NULL;
-  mRgbTemporaryImage = NULL;
-  mRgbLayerImage = NULL;
 
   mTiltAngle = findSFDouble("tiltAngle");
   mHorizontalResolution = findSFInt("horizontalResolution");
@@ -110,9 +107,6 @@ WbLidar::WbLidar(const WbNode &other) : WbAbstractCamera(other) {
 
 WbLidar::~WbLidar() {
   delete mTemporaryImage;
-  delete mRgbWrenCamera;
-  delete[] mRgbTemporaryImage;
-  delete[] mRgbLayerImage;
   if (mIsRemoteExternController) {
     if (mIsPointCloudEnabled)
       delete mTcpCloudPoints;
@@ -174,9 +168,6 @@ void WbLidar::reset(const QString &id) {
   if (mWrenCamera)
     mWrenCamera->rotateYaw(-mCurrentRotatingAngle);
 
-  if (mRgbWrenCamera)
-    mRgbWrenCamera->rotateYaw(-mCurrentRotatingAngle);
-
   mIsPointCloudEnabled = false;
   mCurrentRotatingAngle = 0;
   mPreviousRotatingAngle = 0;
@@ -226,8 +217,6 @@ void WbLidar::prePhysicsStep(double ms) {
       s->rotate(WbVector3(0.0, 0.0, angle));
     if (hasBeenSetup()) {
       mWrenCamera->rotateYaw(angle);
-      if (mRgbWrenCamera)
-        mRgbWrenCamera->rotateYaw(angle);
       mPreviousRotatingAngle = mCurrentRotatingAngle;
       mCurrentRotatingAngle += angle;
     }
@@ -506,100 +495,6 @@ float *WbLidar::lidarImage() const {
   return reinterpret_cast<float *>(image());
 }
 
-void WbLidar::render() {
-  if (!mRgbWrenCamera)
-    return;
-
-  mRgbWrenCamera->render();
-  mRgbWrenCamera->copyContentsToMemory(mRgbTemporaryImage);
-
-  double rgbSkip = 1.0;
-
-  if (height() != actualNumberOfLayers() &&
-      actualNumberOfLayers() != 1)
-    rgbSkip =
-      static_cast<double>(height() - 1) /
-      static_cast<double>(actualNumberOfLayers() - 1);
-
-  const int rgbRowBytes = width() * 4;
-
-  for (int layer = 0; layer < actualNumberOfLayers(); ++layer) {
-    const int sourceRow =
-      static_cast<int>(layer * rgbSkip);
-
-    memcpy(
-      mRgbLayerImage + layer * rgbRowBytes,
-      mRgbTemporaryImage + sourceRow * rgbRowBytes,
-      rgbRowBytes);
-  }
-
-  static bool debugRgbLayersPrinted = false;
-
-  if (!debugRgbLayersPrinted) {
-    const int x = width() / 2;
-    bool allRowsMatch = true;
-
-    std::fprintf(
-      stderr,
-      "[RGB-LIDAR DEBUG] RGB vertical sampling: render=%dx%d selected=%dx%d skip=%.6f\n",
-      width(),
-      height(),
-      width(),
-      actualNumberOfLayers(),
-      rgbSkip);
-
-    for (int layer = 0;
-        layer < actualNumberOfLayers();
-        ++layer) {
-      const int sourceRow =
-        static_cast<int>(layer * rgbSkip);
-
-      const unsigned char *sourceRowData =
-        mRgbTemporaryImage +
-        sourceRow * rgbRowBytes;
-
-      const unsigned char *selectedRowData =
-        mRgbLayerImage +
-        layer * rgbRowBytes;
-
-      const bool rowMatches =
-        memcmp(sourceRowData,
-              selectedRowData,
-              rgbRowBytes) == 0;
-
-      allRowsMatch =
-        allRowsMatch && rowMatches;
-
-      const unsigned char *sourcePixel =
-        sourceRowData + 4 * x;
-
-      const unsigned char *selectedPixel =
-        selectedRowData + 4 * x;
-
-      std::fprintf(
-        stderr,
-        "[RGB-LIDAR DEBUG] layer %d <- source row %d "
-        "source RGB=(%d,%d,%d) selected RGB=(%d,%d,%d) row=%s\n",
-        layer,
-        sourceRow,
-        static_cast<int>(sourcePixel[2]),
-        static_cast<int>(sourcePixel[1]),
-        static_cast<int>(sourcePixel[0]),
-        static_cast<int>(selectedPixel[2]),
-        static_cast<int>(selectedPixel[1]),
-        static_cast<int>(selectedPixel[0]),
-        rowMatches ? "MATCH" : "MISMATCH");
-    }
-
-    std::fprintf(
-      stderr,
-      "[RGB-LIDAR DEBUG] RGB vertical sampling: %s\n",
-      allRowsMatch ? "PASS" : "FAIL");
-
-    debugRgbLayersPrinted = true;
-  }
-}
-
 void WbLidar::createWrenCamera() {
   mActualNumberOfLayers = mNumberOfLayers->value();
   mActualHorizontalResolution = mHorizontalResolution->value();
@@ -614,57 +509,6 @@ void WbLidar::createWrenCamera() {
   applyTiltAngleToWren();
   updateOrientation();
   connect(mWrenCamera, &WbWrenCamera::cameraInitialized, this, &WbLidar::updateOrientation);
-
-  delete mRgbWrenCamera;
-
-  mRgbWrenCamera =
-    new WbWrenCamera(wrenNode(),
-                    width(),
-                    height(),
-                    nearValue(),
-                    minRange(),
-                    maxRange(),
-                    fieldOfView(),
-                    'c',
-                    false,
-                    mProjection->value());
-
-  mRgbWrenCamera->rotatePitch(mTiltAngle->value());
-  mRgbWrenCamera->rotateRoll(M_PI_2);
-  mRgbWrenCamera->rotateYaw(-M_PI_2);
-
-  std::fprintf(stderr,
-              "[RGB-LIDAR DEBUG] RGB companion created: render=%dx%d\n",
-              width(),
-              height());
-
-  delete[] mRgbTemporaryImage;
-
-  mRgbTemporaryImage =
-    new unsigned char[width() * height() * 4];
-
-  memset(mRgbTemporaryImage, 0, width() * height() * 4);
-
-  mRgbWrenCamera->enableCopying(true);
-
-  delete[] mRgbLayerImage;
-
-  mRgbLayerImage =
-    new unsigned char[width() * actualNumberOfLayers() * 4];
-
-  memset(mRgbLayerImage,
-        0,
-        width() * actualNumberOfLayers() * 4);
-
-  std::fprintf(
-    stderr,
-    "[RGB-LIDAR DEBUG] RGB companion created: render=%dx%d temporary=%d bytes layers=%dx%d layerBuffer=%d bytes\n",
-    width(),
-    height(),
-    width() * height() * 4,
-    width(),
-    actualNumberOfLayers(),
-    width() * actualNumberOfLayers() * 4);
 }
 
 void WbLidar::updateOrientation() {

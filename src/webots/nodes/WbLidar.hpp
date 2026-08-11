@@ -100,9 +100,6 @@ private:
   double mPreviousRotatingAngle;
   double mCurrentTiltAngle;
   float *mTemporaryImage;
-  WbWrenCamera *mRgbWrenCamera;
-  unsigned char *mRgbTemporaryImage;
-  unsigned char *mRgbLayerImage;
   float *mTcpImage;
   WbLidarPoint *mTcpCloudPoints;
 
@@ -149,7 +146,6 @@ private:
   }
 
   // WREN methods
-  void render() override;
   void createWrenCamera() override;
   void deleteWren();
   void displayPointCloud();
