@@ -50,6 +50,7 @@ void WbLidar::init() {
   mTemporaryImage = NULL;
   mRgbWrenCamera = NULL;
   mRgbTemporaryImage = NULL;
+  mRgbLayerImage = NULL;
 
   mTiltAngle = findSFDouble("tiltAngle");
   mHorizontalResolution = findSFInt("horizontalResolution");
@@ -111,6 +112,7 @@ WbLidar::~WbLidar() {
   delete mTemporaryImage;
   delete mRgbWrenCamera;
   delete[] mRgbTemporaryImage;
+  delete[] mRgbLayerImage;
   if (mIsRemoteExternController) {
     if (mIsPointCloudEnabled)
       delete mTcpCloudPoints;
@@ -511,63 +513,90 @@ void WbLidar::render() {
   mRgbWrenCamera->render();
   mRgbWrenCamera->copyContentsToMemory(mRgbTemporaryImage);
 
-  static bool debugRgbBufferPrinted = false;
-  if (!debugRgbBufferPrinted) {
-    const int y = height() / 2;
-    const int xSamples[] = {
-      0,
-      width() / 4,
-      width() / 2,
-      3 * width() / 4,
-      width() - 1
-    };
+  double rgbSkip = 1.0;
 
-    std::fprintf(stderr,
-                "[RGB-LIDAR DEBUG] RGB CPU buffer samples at row %d:\n",
-                y);
+  if (height() != actualNumberOfLayers() &&
+      actualNumberOfLayers() != 1)
+    rgbSkip =
+      static_cast<double>(height() - 1) /
+      static_cast<double>(actualNumberOfLayers() - 1);
 
-    bool allMatch = true;
+  const int rgbRowBytes = width() * 4;
 
-    for (const int x : xSamples) {
-      const int index = 4 * (y * width() + x);
+  for (int layer = 0; layer < actualNumberOfLayers(); ++layer) {
+    const int sourceRow =
+      static_cast<int>(layer * rgbSkip);
 
-      const unsigned char b = mRgbTemporaryImage[index];
-      const unsigned char g = mRgbTemporaryImage[index + 1];
-      const unsigned char r = mRgbTemporaryImage[index + 2];
-      const unsigned char a = mRgbTemporaryImage[index + 3];
+    memcpy(
+      mRgbLayerImage + layer * rgbRowBytes,
+      mRgbTemporaryImage + sourceRow * rgbRowBytes,
+      rgbRowBytes);
+  }
 
-      const WbRgb apiColor = mRgbWrenCamera->copyPixelColourValue(x, y);
+  static bool debugRgbLayersPrinted = false;
 
-      const bool matches =
-        r == apiColor.redByte() &&
-        g == apiColor.greenByte() &&
-        b == apiColor.blueByte();
+  if (!debugRgbLayersPrinted) {
+    const int x = width() / 2;
+    bool allRowsMatch = true;
 
-      allMatch = allMatch && matches;
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR DEBUG] RGB vertical sampling: render=%dx%d selected=%dx%d skip=%.6f\n",
+      width(),
+      height(),
+      width(),
+      actualNumberOfLayers(),
+      rgbSkip);
+
+    for (int layer = 0;
+        layer < actualNumberOfLayers();
+        ++layer) {
+      const int sourceRow =
+        static_cast<int>(layer * rgbSkip);
+
+      const unsigned char *sourceRowData =
+        mRgbTemporaryImage +
+        sourceRow * rgbRowBytes;
+
+      const unsigned char *selectedRowData =
+        mRgbLayerImage +
+        layer * rgbRowBytes;
+
+      const bool rowMatches =
+        memcmp(sourceRowData,
+              selectedRowData,
+              rgbRowBytes) == 0;
+
+      allRowsMatch =
+        allRowsMatch && rowMatches;
+
+      const unsigned char *sourcePixel =
+        sourceRowData + 4 * x;
+
+      const unsigned char *selectedPixel =
+        selectedRowData + 4 * x;
 
       std::fprintf(
         stderr,
-        "[RGB-LIDAR DEBUG] x=%d raw BGRA=(%d,%d,%d,%d) RGB=(%d,%d,%d) API=(%d,%d,%d) %s\n",
-        x,
-        static_cast<int>(b),
-        static_cast<int>(g),
-        static_cast<int>(r),
-        static_cast<int>(a),
-        static_cast<int>(r),
-        static_cast<int>(g),
-        static_cast<int>(b),
-        static_cast<int>(apiColor.redByte()),
-        static_cast<int>(apiColor.greenByte()),
-        static_cast<int>(apiColor.blueByte()),
-        matches ? "MATCH" : "MISMATCH"
-      );
+        "[RGB-LIDAR DEBUG] layer %d <- source row %d "
+        "source RGB=(%d,%d,%d) selected RGB=(%d,%d,%d) row=%s\n",
+        layer,
+        sourceRow,
+        static_cast<int>(sourcePixel[2]),
+        static_cast<int>(sourcePixel[1]),
+        static_cast<int>(sourcePixel[0]),
+        static_cast<int>(selectedPixel[2]),
+        static_cast<int>(selectedPixel[1]),
+        static_cast<int>(selectedPixel[0]),
+        rowMatches ? "MATCH" : "MISMATCH");
     }
 
-    std::fprintf(stderr,
-                "[RGB-LIDAR DEBUG] CPU buffer layout: %s\n",
-                allMatch ? "PASS" : "FAIL");
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR DEBUG] RGB vertical sampling: %s\n",
+      allRowsMatch ? "PASS" : "FAIL");
 
-    debugRgbBufferPrinted = true;
+    debugRgbLayersPrinted = true;
   }
 }
 
@@ -618,11 +647,24 @@ void WbLidar::createWrenCamera() {
 
   mRgbWrenCamera->enableCopying(true);
 
-  std::fprintf(stderr,
-             "[RGB-LIDAR DEBUG] RGB companion created: render=%dx%d buffer=%d bytes\n",
-             width(),
-             height(),
-             width() * height() * 4);
+  delete[] mRgbLayerImage;
+
+  mRgbLayerImage =
+    new unsigned char[width() * actualNumberOfLayers() * 4];
+
+  memset(mRgbLayerImage,
+        0,
+        width() * actualNumberOfLayers() * 4);
+
+  std::fprintf(
+    stderr,
+    "[RGB-LIDAR DEBUG] RGB companion created: render=%dx%d temporary=%d bytes layers=%dx%d layerBuffer=%d bytes\n",
+    width(),
+    height(),
+    width() * height() * 4,
+    width(),
+    actualNumberOfLayers(),
+    width() * actualNumberOfLayers() * 4);
 }
 
 void WbLidar::updateOrientation() {

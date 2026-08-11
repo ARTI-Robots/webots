@@ -102,6 +102,7 @@ private:
   float *mTemporaryImage;
   WbWrenCamera *mRgbWrenCamera;
   unsigned char *mRgbTemporaryImage;
+  unsigned char *mRgbLayerImage;
   float *mTcpImage;
   WbLidarPoint *mTcpCloudPoints;
 
