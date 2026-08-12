@@ -37,6 +37,7 @@
 #include "WbWrenShaders.hpp"
 #include "WbWrenSmaa.hpp"
 
+#include <cstdio>
 #include <wren/camera.h>
 #include <wren/frame_buffer.h>
 #include <wren/node.h>
@@ -74,6 +75,8 @@ WbWrenCamera::WbWrenCamera(WrTransform *node, int width, int height, float nearV
   mPostProcessingEffects(),
   mSphericalPostProcessingEffect(NULL),
   mUpdateTextureFormatEffect(NULL),
+  mLidarRgbFrontViewport(NULL),
+  mLidarRgbFrontFrameBuffer(NULL),
   mColorNoiseIntensity(0.0f),
   mRangeNoiseIntensity(0.0f),
   mDepthResolution(-1.0f),
@@ -606,6 +609,8 @@ void WbWrenCamera::init() {
   wr_frame_buffer_setup(mResultFrameBuffer);
 
   setCamerasOrientations();
+
+  setupLidarRgbFrontTarget();
   setNear(mNear);
   setMinRange(mMinRange);
   setMaxRange(mMaxRange);
@@ -622,6 +627,7 @@ void WbWrenCamera::cleanup() {
     return;
 
   WbWrenOpenGlContext::makeWrenCurrent();
+  cleanupLidarRgbFrontTarget();
   foreach (WrPostProcessingEffect *const effect, mPostProcessingEffects)
     wr_post_processing_effect_delete(effect);
   mPostProcessingEffects.clear();
@@ -677,6 +683,102 @@ void WbWrenCamera::cleanup() {
 
   WbWrenOpenGlContext::doneWren();
 }
+
+void WbWrenCamera::setupLidarRgbFrontTarget() {
+  if (mType != 'l' ||
+      isPlanarProjection() ||
+      !mIsCameraActive[CAMERA_ORIENTATION_FRONT])
+    return;
+
+  mLidarRgbFrontViewport = wr_viewport_new();
+
+  wr_viewport_sync_aspect_ratio_with_camera(
+    mLidarRgbFrontViewport,
+    false);
+
+  // IMPORTANT:
+  // reuse the exact existing FRONT LiDAR camera.
+  wr_viewport_set_camera(
+    mLidarRgbFrontViewport,
+    mCamera[CAMERA_ORIENTATION_FRONT]);
+
+  wr_viewport_set_visibility_mask(
+    mLidarRgbFrontViewport,
+    WbWrenRenderingContext::VM_WEBOTS_CAMERA);
+
+  mLidarRgbFrontFrameBuffer = wr_frame_buffer_new();
+
+  wr_frame_buffer_set_size(
+    mLidarRgbFrontFrameBuffer,
+    mSubCamerasResolutionX,
+    mSubCamerasResolutionY);
+
+  wr_frame_buffer_enable_depth_buffer(
+    mLidarRgbFrontFrameBuffer,
+    true);
+
+  WrTextureRtt *colorTexture = wr_texture_rtt_new();
+
+  wr_texture_rtt_enable_initialize_data(
+    colorTexture,
+    true);
+
+  wr_texture_set_internal_format(
+    WR_TEXTURE(colorTexture),
+    WR_TEXTURE_INTERNAL_FORMAT_RGB16F);
+
+  wr_frame_buffer_append_output_texture(
+    mLidarRgbFrontFrameBuffer,
+    colorTexture);
+
+  WrTextureRtt *normalTexture = wr_texture_rtt_new();
+
+  wr_texture_rtt_enable_initialize_data(
+    normalTexture,
+    true);
+
+  wr_texture_set_internal_format(
+    WR_TEXTURE(normalTexture),
+    WR_TEXTURE_INTERNAL_FORMAT_RGB8);
+
+  wr_frame_buffer_append_output_texture(
+    mLidarRgbFrontFrameBuffer,
+    normalTexture);
+
+  WrTextureRtt *depthTexture = wr_texture_rtt_new();
+
+  wr_texture_set_internal_format(
+    WR_TEXTURE(depthTexture),
+    WR_TEXTURE_INTERNAL_FORMAT_DEPTH24_STENCIL8);
+
+  wr_frame_buffer_set_depth_texture(
+    mLidarRgbFrontFrameBuffer,
+    depthTexture);
+
+  wr_viewport_set_frame_buffer(
+    mLidarRgbFrontViewport,
+    mLidarRgbFrontFrameBuffer);
+
+  wr_viewport_set_size(
+    mLidarRgbFrontViewport,
+    mSubCamerasResolutionX,
+    mSubCamerasResolutionY);
+
+  wr_frame_buffer_setup(
+    mLidarRgbFrontFrameBuffer);
+
+  std::fprintf(
+    stderr,
+    "[RGB-LIDAR SHARED] FRONT RGB target created: "
+    "size=%dx%d camera=%p viewport=%p framebuffer=%p\n",
+    mSubCamerasResolutionX,
+    mSubCamerasResolutionY,
+    reinterpret_cast<void *>(
+      mCamera[CAMERA_ORIENTATION_FRONT]),
+    reinterpret_cast<void *>(mLidarRgbFrontViewport),
+    reinterpret_cast<void *>(mLidarRgbFrontFrameBuffer));
+}
+
 
 void WbWrenCamera::setupCamera(int index, int width, int height) {
   mCamera[index] = wr_camera_new();
@@ -1012,4 +1114,37 @@ void WbWrenCamera::applySphericalPostProcessingEffect() {
   }
 
   wr_post_processing_effect_apply(mSphericalPostProcessingEffect);
+}
+
+void WbWrenCamera::cleanupLidarRgbFrontTarget() {
+  if (mLidarRgbFrontViewport) {
+    wr_viewport_delete(mLidarRgbFrontViewport);
+    mLidarRgbFrontViewport = NULL;
+  }
+
+  if (!mLidarRgbFrontFrameBuffer)
+    return;
+
+  WrTextureRtt *colorTexture =
+    wr_frame_buffer_get_output_texture(
+      mLidarRgbFrontFrameBuffer,
+      0);
+
+  WrTextureRtt *normalTexture =
+    wr_frame_buffer_get_output_texture(
+      mLidarRgbFrontFrameBuffer,
+      1);
+
+  WrTextureRtt *depthTexture =
+    wr_frame_buffer_get_depth_texture(
+      mLidarRgbFrontFrameBuffer);
+
+  wr_texture_delete(WR_TEXTURE(colorTexture));
+  wr_texture_delete(WR_TEXTURE(normalTexture));
+  wr_texture_delete(WR_TEXTURE(depthTexture));
+
+  wr_frame_buffer_delete(
+    mLidarRgbFrontFrameBuffer);
+
+  mLidarRgbFrontFrameBuffer = NULL;
 }

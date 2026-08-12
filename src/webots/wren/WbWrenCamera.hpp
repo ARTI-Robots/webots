@@ -130,6 +130,8 @@ private:
   void cleanup();
   void setupCamera(int index, int width, int height);
   void setupSphericalSubCameras();
+  void setupLidarRgbFrontTarget();
+  void cleanupLidarRgbFrontTarget();
   void setupCameraPostProcessing(int index);
   void setupSphericalPostProcessingEffect();
   void setCamerasOrientations();
@@ -180,6 +182,8 @@ private:
   QVector<WrPostProcessingEffect *> mPostProcessingEffects;
   WrPostProcessingEffect *mSphericalPostProcessingEffect;  // spherical/cylindrical projection post processing
   WrPostProcessingEffect *mUpdateTextureFormatEffect;
+  WrViewport *mLidarRgbFrontViewport;
+  WrFrameBuffer *mLidarRgbFrontFrameBuffer;
   WrFrameBuffer *mResultFrameBuffer;
   WrTextureInternalFormat mTextureFormat;
 
