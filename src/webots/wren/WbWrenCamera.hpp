@@ -131,6 +131,7 @@ private:
   void setupCamera(int index, int width, int height);
   void setupSphericalSubCameras();
   void setupLidarRgbFrontTarget();
+  void renderLidarRgbFrontTarget();
   void cleanupLidarRgbFrontTarget();
   void setupCameraPostProcessing(int index);
   void setupSphericalPostProcessingEffect();

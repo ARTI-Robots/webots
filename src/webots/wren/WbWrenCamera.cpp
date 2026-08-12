@@ -469,6 +469,9 @@ void WbWrenCamera::render() {
   mFirstRenderingCall = false;
 
   wr_scene_enable_depth_reset(wr_scene_get_instance(), true);
+
+  if (mType == 'l')
+    renderLidarRgbFrontTarget();
   WbWrenOpenGlContext::doneWren();
 
   if (mNotifyOnTextureUpdate)
@@ -725,7 +728,7 @@ void WbWrenCamera::setupLidarRgbFrontTarget() {
 
   wr_texture_set_internal_format(
     WR_TEXTURE(colorTexture),
-    WR_TEXTURE_INTERNAL_FORMAT_RGB16F);
+    WR_TEXTURE_INTERNAL_FORMAT_RGBA8);
 
   wr_frame_buffer_append_output_texture(
     mLidarRgbFrontFrameBuffer,
@@ -766,6 +769,11 @@ void WbWrenCamera::setupLidarRgbFrontTarget() {
 
   wr_frame_buffer_setup(
     mLidarRgbFrontFrameBuffer);
+
+  wr_frame_buffer_enable_copying(
+    mLidarRgbFrontFrameBuffer,
+    0,
+    true);
 
   std::fprintf(
     stderr,
@@ -1147,4 +1155,59 @@ void WbWrenCamera::cleanupLidarRgbFrontTarget() {
     mLidarRgbFrontFrameBuffer);
 
   mLidarRgbFrontFrameBuffer = NULL;
+}
+
+void WbWrenCamera::renderLidarRgbFrontTarget() {
+  if (!mLidarRgbFrontViewport ||
+      !mLidarRgbFrontFrameBuffer)
+    return;
+
+  WrViewport *viewport =
+    mLidarRgbFrontViewport;
+
+  wr_scene_render_to_viewports(
+    wr_scene_get_instance(),
+    1,
+    &viewport,
+    NULL,
+    true,
+    false);
+
+  static bool debugPixelPrinted = false;
+
+  if (!debugPixelPrinted) {
+    unsigned char pixel[4] = {0, 0, 0, 0};
+
+    const int x =
+      mSubCamerasResolutionX / 2;
+
+    const int y =
+      mSubCamerasResolutionY / 2;
+
+    wr_frame_buffer_copy_pixel(
+      mLidarRgbFrontFrameBuffer,
+      0,
+      x,
+      y,
+      pixel,
+      false);
+
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR SHARED] FRONT center "
+      "x=%d y=%d "
+      "raw BGRA=(%d,%d,%d,%d) "
+      "RGB=(%d,%d,%d)\n",
+      x,
+      y,
+      static_cast<int>(pixel[0]),
+      static_cast<int>(pixel[1]),
+      static_cast<int>(pixel[2]),
+      static_cast<int>(pixel[3]),
+      static_cast<int>(pixel[2]),
+      static_cast<int>(pixel[1]),
+      static_cast<int>(pixel[0]));
+
+    debugPixelPrinted = true;
+  }
 }
