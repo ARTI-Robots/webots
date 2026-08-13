@@ -75,8 +75,6 @@ WbWrenCamera::WbWrenCamera(WrTransform *node, int width, int height, float nearV
   mPostProcessingEffects(),
   mSphericalPostProcessingEffect(NULL),
   mUpdateTextureFormatEffect(NULL),
-  mLidarRgbFrontViewport(NULL),
-  mLidarRgbFrontFrameBuffer(NULL),
   mColorNoiseIntensity(0.0f),
   mRangeNoiseIntensity(0.0f),
   mDepthResolution(-1.0f),
@@ -98,6 +96,8 @@ WbWrenCamera::WbWrenCamera(WrTransform *node, int width, int height, float nearV
     assert(false);
 
   for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
+    mLidarRgbViewport[i] = NULL;
+    mLidarRgbFrameBuffer[i] = NULL;
     mWrenBloom[i] = new WbWrenBloom();
     mWrenColorNoise[i] = new WbWrenColorNoise();
     mWrenDepthOfField[i] = new WbWrenDepthOfField();
@@ -471,7 +471,7 @@ void WbWrenCamera::render() {
   wr_scene_enable_depth_reset(wr_scene_get_instance(), true);
 
   if (mType == 'l')
-    renderLidarRgbFrontTarget();
+    renderLidarRgbTargets();
   WbWrenOpenGlContext::doneWren();
 
   if (mNotifyOnTextureUpdate)
@@ -613,7 +613,7 @@ void WbWrenCamera::init() {
 
   setCamerasOrientations();
 
-  setupLidarRgbFrontTarget();
+  setupLidarRgbTargets();
   setNear(mNear);
   setMinRange(mMinRange);
   setMaxRange(mMaxRange);
@@ -630,7 +630,7 @@ void WbWrenCamera::cleanup() {
     return;
 
   WbWrenOpenGlContext::makeWrenCurrent();
-  cleanupLidarRgbFrontTarget();
+  cleanupLidarRgbTargets();
   foreach (WrPostProcessingEffect *const effect, mPostProcessingEffects)
     wr_post_processing_effect_delete(effect);
   mPostProcessingEffects.clear();
@@ -687,104 +687,132 @@ void WbWrenCamera::cleanup() {
   WbWrenOpenGlContext::doneWren();
 }
 
-void WbWrenCamera::setupLidarRgbFrontTarget() {
-  if (mType != 'l' ||
-      isPlanarProjection() ||
-      !mIsCameraActive[CAMERA_ORIENTATION_FRONT])
+void WbWrenCamera::setupLidarRgbTargets() {
+  if (mType != 'l' || isPlanarProjection())
     return;
 
-  mLidarRgbFrontViewport = wr_viewport_new();
+  const char *orientationNames[] = {
+    "FRONT",
+    "RIGHT",
+    "BACK",
+    "LEFT",
+    "UP",
+    "DOWN"
+  };
 
-  wr_viewport_sync_aspect_ratio_with_camera(
-    mLidarRgbFrontViewport,
-    false);
+  for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
+    if (!mIsCameraActive[i] || !mCamera[i])
+      continue;
 
-  // IMPORTANT:
-  // reuse the exact existing FRONT LiDAR camera.
-  wr_viewport_set_camera(
-    mLidarRgbFrontViewport,
-    mCamera[CAMERA_ORIENTATION_FRONT]);
+    mLidarRgbViewport[i] = wr_viewport_new();
 
-  wr_viewport_set_visibility_mask(
-    mLidarRgbFrontViewport,
-    WbWrenRenderingContext::VM_WEBOTS_CAMERA);
+    wr_viewport_sync_aspect_ratio_with_camera(
+      mLidarRgbViewport[i],
+      false);
 
-  mLidarRgbFrontFrameBuffer = wr_frame_buffer_new();
+    // Critical point:
+    // reuse the actual LiDAR sub-camera.
+    wr_viewport_set_camera(
+      mLidarRgbViewport[i],
+      mCamera[i]);
 
-  wr_frame_buffer_set_size(
-    mLidarRgbFrontFrameBuffer,
-    mSubCamerasResolutionX,
-    mSubCamerasResolutionY);
+    wr_viewport_set_visibility_mask(
+      mLidarRgbViewport[i],
+      WbWrenRenderingContext::VM_WEBOTS_CAMERA);
 
-  wr_frame_buffer_enable_depth_buffer(
-    mLidarRgbFrontFrameBuffer,
-    true);
+    mLidarRgbFrameBuffer[i] =
+      wr_frame_buffer_new();
 
-  WrTextureRtt *colorTexture = wr_texture_rtt_new();
+    wr_frame_buffer_set_size(
+      mLidarRgbFrameBuffer[i],
+      mSubCamerasResolutionX,
+      mSubCamerasResolutionY);
 
-  wr_texture_rtt_enable_initialize_data(
-    colorTexture,
-    true);
+    wr_frame_buffer_enable_depth_buffer(
+      mLidarRgbFrameBuffer[i],
+      true);
 
-  wr_texture_set_internal_format(
-    WR_TEXTURE(colorTexture),
-    WR_TEXTURE_INTERNAL_FORMAT_RGBA8);
+    //
+    // RGB attachment 0.
+    //
+    WrTextureRtt *colorTexture =
+      wr_texture_rtt_new();
 
-  wr_frame_buffer_append_output_texture(
-    mLidarRgbFrontFrameBuffer,
-    colorTexture);
+    wr_texture_rtt_enable_initialize_data(
+      colorTexture,
+      true);
 
-  WrTextureRtt *normalTexture = wr_texture_rtt_new();
+    wr_texture_set_internal_format(
+      WR_TEXTURE(colorTexture),
+      WR_TEXTURE_INTERNAL_FORMAT_RGBA8);
 
-  wr_texture_rtt_enable_initialize_data(
-    normalTexture,
-    true);
+    wr_frame_buffer_append_output_texture(
+      mLidarRgbFrameBuffer[i],
+      colorTexture);
 
-  wr_texture_set_internal_format(
-    WR_TEXTURE(normalTexture),
-    WR_TEXTURE_INTERNAL_FORMAT_RGB8);
+    //
+    // Normal attachment 1.
+    //
+    WrTextureRtt *normalTexture =
+      wr_texture_rtt_new();
 
-  wr_frame_buffer_append_output_texture(
-    mLidarRgbFrontFrameBuffer,
-    normalTexture);
+    wr_texture_rtt_enable_initialize_data(
+      normalTexture,
+      true);
 
-  WrTextureRtt *depthTexture = wr_texture_rtt_new();
+    wr_texture_set_internal_format(
+      WR_TEXTURE(normalTexture),
+      WR_TEXTURE_INTERNAL_FORMAT_RGB8);
 
-  wr_texture_set_internal_format(
-    WR_TEXTURE(depthTexture),
-    WR_TEXTURE_INTERNAL_FORMAT_DEPTH24_STENCIL8);
+    wr_frame_buffer_append_output_texture(
+      mLidarRgbFrameBuffer[i],
+      normalTexture);
 
-  wr_frame_buffer_set_depth_texture(
-    mLidarRgbFrontFrameBuffer,
-    depthTexture);
+    //
+    // Depth texture.
+    //
+    WrTextureRtt *depthTexture =
+      wr_texture_rtt_new();
 
-  wr_viewport_set_frame_buffer(
-    mLidarRgbFrontViewport,
-    mLidarRgbFrontFrameBuffer);
+    wr_texture_set_internal_format(
+      WR_TEXTURE(depthTexture),
+      WR_TEXTURE_INTERNAL_FORMAT_DEPTH24_STENCIL8);
 
-  wr_viewport_set_size(
-    mLidarRgbFrontViewport,
-    mSubCamerasResolutionX,
-    mSubCamerasResolutionY);
+    wr_frame_buffer_set_depth_texture(
+      mLidarRgbFrameBuffer[i],
+      depthTexture);
 
-  wr_frame_buffer_setup(
-    mLidarRgbFrontFrameBuffer);
+    wr_viewport_set_frame_buffer(
+      mLidarRgbViewport[i],
+      mLidarRgbFrameBuffer[i]);
 
-  wr_frame_buffer_enable_copying(
-    mLidarRgbFrontFrameBuffer,
-    0,
-    true);
+    wr_viewport_set_size(
+      mLidarRgbViewport[i],
+      mSubCamerasResolutionX,
+      mSubCamerasResolutionY);
 
-  std::fprintf(
-    stderr,
-    "[RGB-LIDAR SHARED] FRONT RGB target created: "
-    "size=%dx%d camera=%p viewport=%p framebuffer=%p\n",
-    mSubCamerasResolutionX,
-    mSubCamerasResolutionY,
-    reinterpret_cast<void *>(
-      mCamera[CAMERA_ORIENTATION_FRONT]),
-    reinterpret_cast<void *>(mLidarRgbFrontViewport),
-    reinterpret_cast<void *>(mLidarRgbFrontFrameBuffer));
+    wr_frame_buffer_setup(
+      mLidarRgbFrameBuffer[i]);
+
+    // Enable CPU readback for our current diagnostics.
+    wr_frame_buffer_enable_copying(
+      mLidarRgbFrameBuffer[i],
+      0,
+      true);
+
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR SHARED] "
+      "%-5s RGB target created: "
+      "size=%dx%d camera=%p "
+      "viewport=%p framebuffer=%p\n",
+      orientationNames[i],
+      mSubCamerasResolutionX,
+      mSubCamerasResolutionY,
+      reinterpret_cast<void *>(mCamera[i]),
+      reinterpret_cast<void *>(mLidarRgbViewport[i]),
+      reinterpret_cast<void *>(mLidarRgbFrameBuffer[i]));
+  }
 }
 
 
@@ -1124,59 +1152,94 @@ void WbWrenCamera::applySphericalPostProcessingEffect() {
   wr_post_processing_effect_apply(mSphericalPostProcessingEffect);
 }
 
-void WbWrenCamera::cleanupLidarRgbFrontTarget() {
-  if (mLidarRgbFrontViewport) {
-    wr_viewport_delete(mLidarRgbFrontViewport);
-    mLidarRgbFrontViewport = NULL;
+void WbWrenCamera::cleanupLidarRgbTargets() {
+  for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
+    if (mLidarRgbViewport[i]) {
+      wr_viewport_delete(
+        mLidarRgbViewport[i]);
+
+      mLidarRgbViewport[i] = NULL;
+    }
+
+    if (!mLidarRgbFrameBuffer[i])
+      continue;
+
+    WrTextureRtt *colorTexture =
+      wr_frame_buffer_get_output_texture(
+        mLidarRgbFrameBuffer[i],
+        0);
+
+    WrTextureRtt *normalTexture =
+      wr_frame_buffer_get_output_texture(
+        mLidarRgbFrameBuffer[i],
+        1);
+
+    WrTextureRtt *depthTexture =
+      wr_frame_buffer_get_depth_texture(
+        mLidarRgbFrameBuffer[i]);
+
+    if (colorTexture)
+      wr_texture_delete(
+        WR_TEXTURE(colorTexture));
+
+    if (normalTexture)
+      wr_texture_delete(
+        WR_TEXTURE(normalTexture));
+
+    if (depthTexture)
+      wr_texture_delete(
+        WR_TEXTURE(depthTexture));
+
+    wr_frame_buffer_delete(
+      mLidarRgbFrameBuffer[i]);
+
+    mLidarRgbFrameBuffer[i] = NULL;
   }
-
-  if (!mLidarRgbFrontFrameBuffer)
-    return;
-
-  WrTextureRtt *colorTexture =
-    wr_frame_buffer_get_output_texture(
-      mLidarRgbFrontFrameBuffer,
-      0);
-
-  WrTextureRtt *normalTexture =
-    wr_frame_buffer_get_output_texture(
-      mLidarRgbFrontFrameBuffer,
-      1);
-
-  WrTextureRtt *depthTexture =
-    wr_frame_buffer_get_depth_texture(
-      mLidarRgbFrontFrameBuffer);
-
-  wr_texture_delete(WR_TEXTURE(colorTexture));
-  wr_texture_delete(WR_TEXTURE(normalTexture));
-  wr_texture_delete(WR_TEXTURE(depthTexture));
-
-  wr_frame_buffer_delete(
-    mLidarRgbFrontFrameBuffer);
-
-  mLidarRgbFrontFrameBuffer = NULL;
 }
 
-void WbWrenCamera::renderLidarRgbFrontTarget() {
-  if (!mLidarRgbFrontViewport ||
-      !mLidarRgbFrontFrameBuffer)
+void WbWrenCamera::renderLidarRgbTargets() {
+  if (mType != 'l')
     return;
 
-  WrViewport *viewport =
-    mLidarRgbFrontViewport;
+  WrViewport *viewports[CAMERA_ORIENTATION_COUNT];
+  int numViewports = 0;
 
+  for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
+    if (!mIsCameraActive[i] ||
+        !mLidarRgbViewport[i] ||
+        !mLidarRgbFrameBuffer[i])
+      continue;
+
+    viewports[numViewports++] =
+      mLidarRgbViewport[i];
+  }
+
+  if (numViewports == 0)
+    return;
+
+  //
+  // Render normal scene materials through the same
+  // WrCamera objects used by the LiDAR.
+  //
   wr_scene_render_to_viewports(
     wr_scene_get_instance(),
-    1,
-    &viewport,
+    numViewports,
+    viewports,
     NULL,
     true,
     false);
 
-  static bool debugPixelPrinted = false;
+  static bool debugPixelsPrinted = false;
 
-  if (!debugPixelPrinted) {
-    unsigned char pixel[4] = {0, 0, 0, 0};
+  if (!debugPixelsPrinted) {
+    const char *orientationNames[] = {
+      "FRONT",
+      "RIGHT",
+      "BACK",
+      "LEFT",
+      "UP",
+      "DOWN"
+    };
 
     const int x =
       mSubCamerasResolutionX / 2;
@@ -1184,30 +1247,40 @@ void WbWrenCamera::renderLidarRgbFrontTarget() {
     const int y =
       mSubCamerasResolutionY / 2;
 
-    wr_frame_buffer_copy_pixel(
-      mLidarRgbFrontFrameBuffer,
-      0,
-      x,
-      y,
-      pixel,
-      false);
+    for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
+      if (!mIsCameraActive[i] ||
+          !mLidarRgbFrameBuffer[i])
+        continue;
 
-    std::fprintf(
-      stderr,
-      "[RGB-LIDAR SHARED] FRONT center "
-      "x=%d y=%d "
-      "raw BGRA=(%d,%d,%d,%d) "
-      "RGB=(%d,%d,%d)\n",
-      x,
-      y,
-      static_cast<int>(pixel[0]),
-      static_cast<int>(pixel[1]),
-      static_cast<int>(pixel[2]),
-      static_cast<int>(pixel[3]),
-      static_cast<int>(pixel[2]),
-      static_cast<int>(pixel[1]),
-      static_cast<int>(pixel[0]));
+      unsigned char pixel[4] =
+        {0, 0, 0, 0};
 
-    debugPixelPrinted = true;
+      wr_frame_buffer_copy_pixel(
+        mLidarRgbFrameBuffer[i],
+        0,
+        x,
+        y,
+        pixel,
+        false);
+
+      std::fprintf(
+        stderr,
+        "[RGB-LIDAR SHARED] "
+        "%-5s center x=%d y=%d "
+        "rawBGRA=(%d,%d,%d,%d) "
+        "RGB=(%d,%d,%d)\n",
+        orientationNames[i],
+        x,
+        y,
+        static_cast<int>(pixel[0]),
+        static_cast<int>(pixel[1]),
+        static_cast<int>(pixel[2]),
+        static_cast<int>(pixel[3]),
+        static_cast<int>(pixel[2]),
+        static_cast<int>(pixel[1]),
+        static_cast<int>(pixel[0]));
+    }
+
+    debugPixelsPrinted = true;
   }
 }
