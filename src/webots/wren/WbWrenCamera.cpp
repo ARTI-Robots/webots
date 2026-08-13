@@ -75,6 +75,7 @@ WbWrenCamera::WbWrenCamera(WrTransform *node, int width, int height, float nearV
   mPostProcessingEffects(),
   mSphericalPostProcessingEffect(NULL),
   mUpdateTextureFormatEffect(NULL),
+  mLidarMergedRgbFrameBuffer(NULL),
   mColorNoiseIntensity(0.0f),
   mRangeNoiseIntensity(0.0f),
   mDepthResolution(-1.0f),
@@ -613,7 +614,14 @@ void WbWrenCamera::init() {
 
   setCamerasOrientations();
 
+  // Step 17:
+  // create RGB targets that reuse each active LiDAR WrCamera.
   setupLidarRgbTargets();
+
+  // Step 18A:
+  // create the final RGB panorama destination.
+  setupLidarMergedRgbTarget();
+
   setNear(mNear);
   setMinRange(mMinRange);
   setMaxRange(mMaxRange);
@@ -630,6 +638,7 @@ void WbWrenCamera::cleanup() {
     return;
 
   WbWrenOpenGlContext::makeWrenCurrent();
+  cleanupLidarMergedRgbTarget();
   cleanupLidarRgbTargets();
   foreach (WrPostProcessingEffect *const effect, mPostProcessingEffects)
     wr_post_processing_effect_delete(effect);
@@ -813,6 +822,50 @@ void WbWrenCamera::setupLidarRgbTargets() {
       reinterpret_cast<void *>(mLidarRgbViewport[i]),
       reinterpret_cast<void *>(mLidarRgbFrameBuffer[i]));
   }
+}
+
+void WbWrenCamera::setupLidarMergedRgbTarget() {
+  if (mType != 'l' || isPlanarProjection())
+    return;
+
+  mLidarMergedRgbFrameBuffer = wr_frame_buffer_new();
+
+  wr_frame_buffer_set_size(
+    mLidarMergedRgbFrameBuffer,
+    mWidth,
+    mHeight);
+
+  WrTextureRtt *colorTexture =
+    wr_texture_rtt_new();
+
+  wr_texture_rtt_enable_initialize_data(
+    colorTexture,
+    true);
+
+  wr_texture_set_internal_format(
+    WR_TEXTURE(colorTexture),
+    WR_TEXTURE_INTERNAL_FORMAT_RGBA8);
+
+  wr_frame_buffer_append_output_texture(
+    mLidarMergedRgbFrameBuffer,
+    colorTexture);
+
+  wr_frame_buffer_setup(
+    mLidarMergedRgbFrameBuffer);
+
+  wr_frame_buffer_enable_copying(
+    mLidarMergedRgbFrameBuffer,
+    0,
+    true);
+
+  std::fprintf(
+    stderr,
+    "[RGB-LIDAR MERGE] RGB panorama target created: "
+    "size=%dx%d framebuffer=%p texture=%p\n",
+    mWidth,
+    mHeight,
+    reinterpret_cast<void *>(mLidarMergedRgbFrameBuffer),
+    reinterpret_cast<void *>(colorTexture));
 }
 
 
@@ -1195,6 +1248,25 @@ void WbWrenCamera::cleanupLidarRgbTargets() {
 
     mLidarRgbFrameBuffer[i] = NULL;
   }
+}
+
+void WbWrenCamera::cleanupLidarMergedRgbTarget() {
+  if (!mLidarMergedRgbFrameBuffer)
+    return;
+
+  WrTextureRtt *colorTexture =
+    wr_frame_buffer_get_output_texture(
+      mLidarMergedRgbFrameBuffer,
+      0);
+
+  if (colorTexture)
+    wr_texture_delete(
+      WR_TEXTURE(colorTexture));
+
+  wr_frame_buffer_delete(
+    mLidarMergedRgbFrameBuffer);
+
+  mLidarMergedRgbFrameBuffer = NULL;
 }
 
 void WbWrenCamera::renderLidarRgbTargets() {
