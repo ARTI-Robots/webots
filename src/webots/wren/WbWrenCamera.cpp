@@ -100,6 +100,8 @@ WbWrenCamera::WbWrenCamera(WrTransform *node, int width, int height, float nearV
   for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
     mLidarRgbViewport[i] = NULL;
     mLidarRgbFrameBuffer[i] = NULL;
+    mLidarPackedFrameBuffer[i] = NULL;
+    mLidarPackEffect[i] = NULL;
     mWrenBloom[i] = new WbWrenBloom();
     mWrenColorNoise[i] = new WbWrenColorNoise();
     mWrenDepthOfField[i] = new WbWrenDepthOfField();
@@ -618,6 +620,7 @@ void WbWrenCamera::init() {
   setupLidarRgbTargets();
   setupLidarMergedRgbTarget();
   setupLidarRgbMergeEffect();
+  setupLidarPackedTargets();
 
   setNear(mNear);
   setMinRange(mMinRange);
@@ -635,6 +638,7 @@ void WbWrenCamera::cleanup() {
     return;
 
   WbWrenOpenGlContext::makeWrenCurrent();
+  cleanupLidarPackedTargets();
   cleanupLidarRgbMergeEffect();
   cleanupLidarMergedRgbTarget();
   cleanupLidarRgbTargets();
@@ -865,6 +869,222 @@ void WbWrenCamera::setupLidarMergedRgbTarget() {
     reinterpret_cast<void *>(mLidarMergedRgbFrameBuffer),
     reinterpret_cast<void *>(colorTexture));
 }
+
+void WbWrenCamera::setupLidarPackedTargets() {
+  if (mType != 'l' || isPlanarProjection())
+    return;
+
+  const char *orientationNames[] = {
+    "FRONT",
+    "RIGHT",
+    "BACK",
+    "LEFT",
+    "UP",
+    "DOWN"
+  };
+
+  for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
+    if (!mIsCameraActive[i] ||
+        !mLidarRgbFrameBuffer[i] ||
+        !mCameraFrameBuffer[i])
+      continue;
+
+    mLidarPackedFrameBuffer[i] =
+      wr_frame_buffer_new();
+
+    wr_frame_buffer_set_size(
+      mLidarPackedFrameBuffer[i],
+      mSubCamerasResolutionX,
+      mSubCamerasResolutionY);
+
+    WrTextureRtt *packedTexture =
+      wr_texture_rtt_new();
+
+    wr_texture_rtt_enable_initialize_data(
+      packedTexture,
+      true);
+
+    wr_texture_set_internal_format(
+      WR_TEXTURE(packedTexture),
+      WR_TEXTURE_INTERNAL_FORMAT_RGBA32F);
+
+    wr_frame_buffer_append_output_texture(
+      mLidarPackedFrameBuffer[i],
+      packedTexture);
+
+    wr_frame_buffer_setup(
+      mLidarPackedFrameBuffer[i]);
+
+    wr_frame_buffer_enable_copying(
+      mLidarPackedFrameBuffer[i],
+      0,
+      true);
+
+    mLidarPackEffect[i] =
+      WbWrenPostProcessingEffects::packRgbRange(
+        mSubCamerasResolutionX,
+        mSubCamerasResolutionY);
+
+    wr_post_processing_effect_set_result_frame_buffer(
+      mLidarPackEffect[i],
+      mLidarPackedFrameBuffer[i]);
+
+    wr_post_processing_effect_setup(
+      mLidarPackEffect[i]);
+
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR PACK] %-5s target created: "
+      "size=%dx%d framebuffer=%p effect=%p\n",
+      orientationNames[i],
+      mSubCamerasResolutionX,
+      mSubCamerasResolutionY,
+      reinterpret_cast<void *>(
+        mLidarPackedFrameBuffer[i]),
+      reinterpret_cast<void *>(
+        mLidarPackEffect[i]));
+  }
+}
+
+void WbWrenCamera::applyLidarPackEffects() {
+  const char *orientationNames[] = {
+    "FRONT",
+    "RIGHT",
+    "BACK",
+    "LEFT",
+    "UP",
+    "DOWN"
+  };
+
+  static bool debugPackedPixelsPrinted = false;
+
+  for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
+    if (!mIsCameraActive[i] ||
+        !mLidarPackEffect[i] ||
+        !mLidarPackedFrameBuffer[i] ||
+        !mLidarRgbFrameBuffer[i] ||
+        !mCameraFrameBuffer[i])
+      continue;
+
+    WrPostProcessingEffectPass *packPass =
+      wr_post_processing_effect_get_pass(
+        mLidarPackEffect[i],
+        "PackRgbRange");
+
+    if (!packPass) {
+      std::fprintf(
+        stderr,
+        "[RGB-LIDAR PACK] ERROR: "
+        "%s PackRgbRange pass not found\n",
+        orientationNames[i]);
+      continue;
+    }
+
+    // Input 0 = RGB for this exact LiDAR face.
+    wr_post_processing_effect_pass_set_input_texture(
+      packPass,
+      0,
+      WR_TEXTURE(
+        wr_frame_buffer_get_output_texture(
+          mLidarRgbFrameBuffer[i],
+          0)));
+
+    // Input 1 = original raw LiDAR range for same face.
+    wr_post_processing_effect_pass_set_input_texture(
+      packPass,
+      1,
+      WR_TEXTURE(
+        wr_frame_buffer_get_output_texture(
+          mCameraFrameBuffer[i],
+          0)));
+
+    wr_post_processing_effect_apply(
+      mLidarPackEffect[i]);
+
+    if (!debugPackedPixelsPrinted) {
+      const int x =
+        mSubCamerasResolutionX / 2;
+
+      const int y =
+        mSubCamerasResolutionY / 2;
+
+      float pixel[4] = {
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f
+      };
+
+      wr_frame_buffer_copy_pixel(
+        mLidarPackedFrameBuffer[i],
+        0,
+        x,
+        y,
+        pixel,
+        false);
+
+      std::fprintf(
+        stderr,
+        "[RGB-LIDAR PACK] %-5s center "
+        "x=%d y=%d "
+        "RGBA=(%.6f,%.6f,%.6f,%.6f) "
+        "RGB8~=(%d,%d,%d) "
+        "rawRange=%.6f\n",
+        orientationNames[i],
+        x,
+        y,
+        pixel[0],
+        pixel[1],
+        pixel[2],
+        pixel[3],
+        static_cast<int>(pixel[0] * 255.0f),
+        static_cast<int>(pixel[1] * 255.0f),
+        static_cast<int>(pixel[2] * 255.0f),
+        pixel[3]);
+    }
+  }
+
+  debugPackedPixelsPrinted = true;
+}
+
+void WbWrenCamera::cleanupLidarPackedTargets() {
+  for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
+    if (mLidarPackEffect[i]) {
+      wr_post_processing_effect_delete(
+        mLidarPackEffect[i]);
+
+      mLidarPackEffect[i] = NULL;
+    }
+
+    if (!mLidarPackedFrameBuffer[i])
+      continue;
+
+    WrTextureRtt *packedTexture =
+      wr_frame_buffer_get_output_texture(
+        mLidarPackedFrameBuffer[i],
+        0);
+
+    if (packedTexture)
+      wr_texture_delete(
+        WR_TEXTURE(packedTexture));
+
+    wr_frame_buffer_delete(
+      mLidarPackedFrameBuffer[i]);
+
+    mLidarPackedFrameBuffer[i] = NULL;
+  }
+}
+
+void WbWrenCamera::cleanupLidarRgbMergeEffect() {
+  if (!mLidarRgbMergeEffect)
+    return;
+
+  wr_post_processing_effect_delete(
+    mLidarRgbMergeEffect);
+
+  mLidarRgbMergeEffect = NULL;
+}
+
 
 void WbWrenCamera::setupLidarRgbMergeEffect() {
   if (mType != 'l' ||
@@ -1435,16 +1655,6 @@ void WbWrenCamera::cleanupLidarMergedRgbTarget() {
   mLidarMergedRgbFrameBuffer = NULL;
 }
 
-void WbWrenCamera::cleanupLidarRgbMergeEffect() {
-  if (!mLidarRgbMergeEffect)
-    return;
-
-  wr_post_processing_effect_delete(
-    mLidarRgbMergeEffect);
-
-  mLidarRgbMergeEffect = NULL;
-}
-
 void WbWrenCamera::renderLidarRgbTargets() {
   if (mType != 'l')
     return;
@@ -1476,6 +1686,7 @@ void WbWrenCamera::renderLidarRgbTargets() {
     NULL,
     true,
     false);
+  applyLidarPackEffects();
 
   applyLidarRgbMergeEffect();
 

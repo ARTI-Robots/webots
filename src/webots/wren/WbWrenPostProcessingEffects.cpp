@@ -156,6 +156,68 @@ WrPostProcessingEffect *WbWrenPostProcessingEffects::sphericalCameraMerge(float 
   return sphericalMerge;
 }
 
+WrPostProcessingEffect *WbWrenPostProcessingEffects::packRgbRange(float width, float height) {
+
+  WrPostProcessingEffect *effect =
+    wr_post_processing_effect_new();
+
+  WrPostProcessingEffectPass *pass =
+    wr_post_processing_effect_pass_new();
+
+  wr_post_processing_effect_pass_set_name(
+    pass,
+    "PackRgbRange");
+
+  wr_post_processing_effect_pass_set_program(
+    pass,
+    WbWrenShaders::packRgbRangeShader());
+
+  wr_post_processing_effect_pass_set_output_size(
+    pass,
+    width,
+    height);
+
+  wr_post_processing_effect_pass_set_alpha_blending(
+    pass,
+    false);
+
+  // Input 0 = RGB
+  // Input 1 = range
+  wr_post_processing_effect_pass_set_input_texture_count(
+    pass,
+    2);
+
+  wr_post_processing_effect_pass_set_input_texture_wrap_mode(
+    pass,
+    0,
+    WR_TEXTURE_WRAP_MODE_CLAMP_TO_EDGE);
+
+  wr_post_processing_effect_pass_set_input_texture_wrap_mode(
+    pass,
+    1,
+    WR_TEXTURE_WRAP_MODE_CLAMP_TO_EDGE);
+
+  // One packed RGBA output.
+  wr_post_processing_effect_pass_set_output_texture_count(
+    pass,
+    1);
+
+  wr_post_processing_effect_pass_set_output_texture_format(
+    pass,
+    0,
+    WR_TEXTURE_INTERNAL_FORMAT_RGBA32F);
+
+  wr_post_processing_effect_append_pass(
+    effect,
+    pass);
+
+  wr_post_processing_effect_set_result_program(
+    effect,
+    WbWrenShaders::passThroughShader());
+
+  return effect;
+}
+
 WrPostProcessingEffect *WbWrenPostProcessingEffects::lensDistortion(float width, float height,
                                                                     WrTextureInternalFormat textureFormat) {
   WrPostProcessingEffect *lensDistortion = wr_post_processing_effect_new();

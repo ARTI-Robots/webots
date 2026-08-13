@@ -25,6 +25,7 @@ namespace WbWrenPostProcessingEffects {
   WrPostProcessingEffect *lensFlare(float width, float height, int blurIterations);
   WrPostProcessingEffect *sphericalCameraMerge(float width, float height, int cameraCount,
                                                WrTextureInternalFormat textureFormat);
+  WrPostProcessingEffect *packRgbRange(float width, float height);
 
   WrPostProcessingEffect *lensDistortion(float width, float height, WrTextureInternalFormat textureFormat);
   WrPostProcessingEffect *depthOfField(float width, float height, float depthOfFieldTextureWidth,

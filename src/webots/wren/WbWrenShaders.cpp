@@ -89,6 +89,7 @@ enum SHADER {
   SHADER_LIGHT_REPRESENTATION,
   SHADER_LINE_SET,
   SHADER_MERGE_SPHERICAL,
+  SHADER_PACK_RGB_RANGE,
   SHADER_MOTION_BLUR,
   SHADER_NOISE_MASK,
   SHADER_OVERLAY,
@@ -759,6 +760,28 @@ WrShaderProgram *WbWrenShaders::mergeSphericalShader() {
   }
 
   return gShaders[SHADER_MERGE_SPHERICAL];
+}
+
+WrShaderProgram *WbWrenShaders::packRgbRangeShader() {
+  if (!gShaders[SHADER_PACK_RGB_RANGE]) {
+    gShaders[SHADER_PACK_RGB_RANGE] =
+      wr_shader_program_new();
+
+    wr_shader_program_use_uniform(
+      gShaders[SHADER_PACK_RGB_RANGE],
+      WR_GLSL_LAYOUT_UNIFORM_TEXTURE0);
+
+    wr_shader_program_use_uniform(
+      gShaders[SHADER_PACK_RGB_RANGE],
+      WR_GLSL_LAYOUT_UNIFORM_TEXTURE1);
+
+    ::buildShader(
+      gShaders[SHADER_PACK_RGB_RANGE],
+      QFileInfo("gl:shaders/pass_through.vert"),
+      QFileInfo("gl:shaders/pack_rgb_range.frag"));
+  }
+
+  return gShaders[SHADER_PACK_RGB_RANGE];
 }
 
 WrShaderProgram *WbWrenShaders::motionBlurShader() {

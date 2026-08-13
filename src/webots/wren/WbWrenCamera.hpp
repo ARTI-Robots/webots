@@ -141,6 +141,9 @@ private:
   void setupLidarRgbMergeEffect();
   void applyLidarRgbMergeEffect();
   void cleanupLidarRgbMergeEffect();
+  void setupLidarPackedTargets();
+  void applyLidarPackEffects();
+  void cleanupLidarPackedTargets();
   void setupCameraPostProcessing(int index);
   void setupSphericalPostProcessingEffect();
   void setCamerasOrientations();
@@ -195,6 +198,8 @@ private:
   WrFrameBuffer *mLidarRgbFrameBuffer[CAMERA_ORIENTATION_COUNT];
   WrFrameBuffer *mLidarMergedRgbFrameBuffer;
   WrPostProcessingEffect *mLidarRgbMergeEffect;
+  WrFrameBuffer *mLidarPackedFrameBuffer[CAMERA_ORIENTATION_COUNT];
+  WrPostProcessingEffect *mLidarPackEffect[CAMERA_ORIENTATION_COUNT];
   WrFrameBuffer *mResultFrameBuffer;
   WrTextureInternalFormat mTextureFormat;
 

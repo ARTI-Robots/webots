@@ -50,6 +50,7 @@ namespace WbWrenShaders {
   WrShaderProgram *lightRepresentationShader();
   WrShaderProgram *lineSetShader();
   WrShaderProgram *mergeSphericalShader();
+  WrShaderProgram *packRgbRangeShader();
   WrShaderProgram *motionBlurShader();
   WrShaderProgram *noiseMaskShader();
   WrShaderProgram *overlayShader();
