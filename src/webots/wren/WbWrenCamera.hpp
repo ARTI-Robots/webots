@@ -130,11 +130,17 @@ private:
   void cleanup();
   void setupCamera(int index, int width, int height);
   void setupSphericalSubCameras();
+  // Per-face shared-camera RGB rendering.
   void setupLidarRgbTargets();
   void renderLidarRgbTargets();
   void cleanupLidarRgbTargets();
+  // Destination RGB panorama.
   void setupLidarMergedRgbTarget();
   void cleanupLidarMergedRgbTarget();
+  // Cylindrical RGB merge.
+  void setupLidarRgbMergeEffect();
+  void applyLidarRgbMergeEffect();
+  void cleanupLidarRgbMergeEffect();
   void setupCameraPostProcessing(int index);
   void setupSphericalPostProcessingEffect();
   void setCamerasOrientations();
@@ -188,6 +194,7 @@ private:
   WrViewport *mLidarRgbViewport[CAMERA_ORIENTATION_COUNT];
   WrFrameBuffer *mLidarRgbFrameBuffer[CAMERA_ORIENTATION_COUNT];
   WrFrameBuffer *mLidarMergedRgbFrameBuffer;
+  WrPostProcessingEffect *mLidarRgbMergeEffect;
   WrFrameBuffer *mResultFrameBuffer;
   WrTextureInternalFormat mTextureFormat;
 
