@@ -538,6 +538,23 @@ void WbWrenCamera::copyContentsToMemory(void *data) {
   WbWrenOpenGlContext::doneWren();
 }
 
+void WbWrenCamera::copyLidarRgbContentsToMemory(void *data) {
+  if (!data ||
+      !mLidarMergedRgbFrameBuffer ||
+      mWidth < 1 ||
+      mHeight < 1)
+    return;
+
+  WbWrenOpenGlContext::makeWrenCurrent();
+
+  wr_frame_buffer_copy_contents(
+    mLidarMergedRgbFrameBuffer,
+    0,
+    data);
+
+  WbWrenOpenGlContext::doneWren();
+}
+
 void WbWrenCamera::rotateRoll(float angle) {
   for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
     if (mIsCameraActive[i])

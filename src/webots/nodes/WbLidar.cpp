@@ -378,6 +378,85 @@ void WbLidar::copyAllLayersToMemoryMappedFile() {
 
   mWrenCamera->enableCopying(true);
   mWrenCamera->copyContentsToMemory(mTemporaryImage);
+  // RGB-LiDAR CPU readback diagnostic.
+  // The merged panorama is RGBA8 internally, but desktop WREN
+  // reads RGBA8 pixels back in BGRA byte order.
+  static bool rgbCpuReadbackPrinted = false;
+
+  if (!rgbCpuReadbackPrinted) {
+    const int rgbWidth = width();
+    const int rgbHeight = height();
+    const int rgbByteCount =
+      rgbWidth * rgbHeight * 4;
+
+    unsigned char *rgbPanorama =
+      new unsigned char[rgbByteCount];
+
+    mWrenCamera->copyLidarRgbContentsToMemory(
+      rgbPanorama);
+
+    const int y = rgbHeight / 2;
+
+    const int columns[] = {
+      0,
+      rgbWidth / 4,
+      rgbWidth / 2,
+      3 * rgbWidth / 4
+    };
+
+    const char *directions[] = {
+      "-X / BACK",
+      "+Y / LEFT",
+      "+X / FRONT",
+      "-Y / RIGHT"
+    };
+
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR CPU] panorama=%dx%d row=%d\n",
+      rgbWidth,
+      rgbHeight,
+      y);
+
+    for (int i = 0; i < 4; ++i) {
+      const int x = columns[i];
+
+      const int index =
+        4 * (y * rgbWidth + x);
+
+      const unsigned char b =
+        rgbPanorama[index + 0];
+
+      const unsigned char g =
+        rgbPanorama[index + 1];
+
+      const unsigned char r =
+        rgbPanorama[index + 2];
+
+      const unsigned char a =
+        rgbPanorama[index + 3];
+
+      std::fprintf(
+        stderr,
+        "[RGB-LIDAR CPU] "
+        "x=%d dir=%s "
+        "BGRA=(%u,%u,%u,%u) "
+        "RGB=(%u,%u,%u)\n",
+        x,
+        directions[i],
+        static_cast<unsigned int>(b),
+        static_cast<unsigned int>(g),
+        static_cast<unsigned int>(r),
+        static_cast<unsigned int>(a),
+        static_cast<unsigned int>(r),
+        static_cast<unsigned int>(g),
+        static_cast<unsigned int>(b));
+    }
+
+    delete[] rgbPanorama;
+
+    rgbCpuReadbackPrinted = true;
+  }
   // if rotating compute which part of the image should be updated
   if (mIsActuallyRotating) {
     double deltaAngle = fabs(mCurrentRotatingAngle - mPreviousRotatingAngle);

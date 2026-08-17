@@ -107,6 +107,7 @@ public:
   void enableCopying(bool enable);
   WbRgb copyPixelColourValue(int x, int y);
   void copyContentsToMemory(void *data);
+  void copyLidarRgbContentsToMemory(void *data);
 
   void enableTextureUpdateNotifications(bool enabled) { mNotifyOnTextureUpdate = enabled; }
 
