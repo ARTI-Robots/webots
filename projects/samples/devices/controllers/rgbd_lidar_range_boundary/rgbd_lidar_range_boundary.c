@@ -31,13 +31,26 @@ int main(int argc, char **argv) {
       // For 6 layers this is layer 3.
       // Earlier diagnostics showed layer 3 maps
       // to merged panorama row 5.
-      const int layer =
-        layers / 2;
+      const int layer = layers / 2;
 
       const float *image =
         wb_lidar_get_layer_range_image(
           lidar,
           layer);
+
+      const WbLidarPoint *points =
+        wb_lidar_get_layer_point_cloud(
+          lidar,
+          layer);
+      if (!image || !points) {
+        fprintf(
+          stderr,
+          "[PUBLIC RGB POINT] ERROR: "
+          "range image or point cloud is NULL\n");
+
+        fflush(stderr);
+        continue;
+      }
 
       printf(
         "[PUBLIC BOUNDARY] layer=%d\n",
@@ -51,6 +64,34 @@ int main(int argc, char **argv) {
           "column=%d range=%.6f\n",
           column,
           image[column]);
+      }
+
+      printf(
+        "[PUBLIC RGB POINT] layer=%d\n",
+        layer);
+
+      for (int column = 124;
+          column <= 131;
+          ++column) {
+
+        const WbLidarPoint *point =
+          &points[column];
+
+        printf(
+          "[PUBLIC RGB POINT] "
+          "column=%d "
+          "XYZ=(%.6f,%.6f,%.6f) "
+          "layer_id=%d "
+          "RGBA=(%u,%u,%u,%u)\n",
+          column,
+          point->x,
+          point->y,
+          point->z,
+          point->layer_id,
+          (unsigned int)point->r,
+          (unsigned int)point->g,
+          (unsigned int)point->b,
+          (unsigned int)point->a);
       }
 
       fflush(stdout);
