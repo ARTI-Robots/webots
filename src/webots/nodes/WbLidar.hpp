@@ -100,6 +100,16 @@ private:
   double mPreviousRotatingAngle;
   double mCurrentTiltAngle;
   float *mTemporaryImage;
+
+  // RGB-LiDAR CPU buffers.
+  // mTemporaryRgbImage stores the full merged panorama:
+  // width() * height() * BGRA8.
+  //
+  // mRgbImage stores the vertically sampled LiDAR RGB image:
+  // actualHorizontalResolution() * actualNumberOfLayers() * BGRA8.
+  unsigned char *mTemporaryRgbImage;
+  unsigned char *mRgbImage;
+
   float *mTcpImage;
   WbLidarPoint *mTcpCloudPoints;
 

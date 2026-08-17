@@ -48,6 +48,8 @@ void WbLidar::init() {
   mPreviousRotatingAngle = 0;
   mCurrentTiltAngle = 0;
   mTemporaryImage = NULL;
+  mTemporaryRgbImage = NULL;
+  mRgbImage = NULL;
 
   mTiltAngle = findSFDouble("tiltAngle");
   mHorizontalResolution = findSFInt("horizontalResolution");
@@ -107,6 +109,8 @@ WbLidar::WbLidar(const WbNode &other) : WbAbstractCamera(other) {
 
 WbLidar::~WbLidar() {
   delete mTemporaryImage;
+  delete[] mTemporaryRgbImage;
+  delete[] mRgbImage;
   if (mIsRemoteExternController) {
     if (mIsPointCloudEnabled)
       delete mTcpCloudPoints;
@@ -174,6 +178,19 @@ void WbLidar::reset(const QString &id) {
   if (mTemporaryImage)
     memset(mTemporaryImage, 0, actualHorizontalResolution() * height() * sizeof(float));
   hidePointCloud();
+  if (mTemporaryRgbImage)
+  memset(
+    mTemporaryRgbImage,
+    0,
+    width() * height() * 4);
+
+  if (mRgbImage)
+    memset(
+      mRgbImage,
+      0,
+      actualHorizontalResolution() *
+        actualNumberOfLayers() *
+        4);
 }
 
 void WbLidar::updateOptionalRendering(int option) {
@@ -198,6 +215,29 @@ void WbLidar::initializeImageMemoryMappedFile() {
       im[i] = 0.0f;
   }
   mTemporaryImage = new float[actualHorizontalResolution() * height()];
+  const int rgbPanoramaByteCount =
+    width() * height() * 4;
+
+  const int rgbLayerByteCount =
+    actualHorizontalResolution() *
+    actualNumberOfLayers() *
+    4;
+
+  mTemporaryRgbImage =
+    new unsigned char[rgbPanoramaByteCount];
+
+  mRgbImage =
+    new unsigned char[rgbLayerByteCount];
+
+  memset(
+    mTemporaryRgbImage,
+    0,
+    rgbPanoramaByteCount);
+
+  memset(
+    mRgbImage,
+    0,
+    rgbLayerByteCount);
 }
 
 QString WbLidar::pixelInfo(int x, int y) const {
@@ -378,85 +418,7 @@ void WbLidar::copyAllLayersToMemoryMappedFile() {
 
   mWrenCamera->enableCopying(true);
   mWrenCamera->copyContentsToMemory(mTemporaryImage);
-  // RGB-LiDAR CPU readback diagnostic.
-  // The merged panorama is RGBA8 internally, but desktop WREN
-  // reads RGBA8 pixels back in BGRA byte order.
-  static bool rgbCpuReadbackPrinted = false;
-
-  if (!rgbCpuReadbackPrinted) {
-    const int rgbWidth = width();
-    const int rgbHeight = height();
-    const int rgbByteCount =
-      rgbWidth * rgbHeight * 4;
-
-    unsigned char *rgbPanorama =
-      new unsigned char[rgbByteCount];
-
-    mWrenCamera->copyLidarRgbContentsToMemory(
-      rgbPanorama);
-
-    const int y = rgbHeight / 2;
-
-    const int columns[] = {
-      0,
-      rgbWidth / 4,
-      rgbWidth / 2,
-      3 * rgbWidth / 4
-    };
-
-    const char *directions[] = {
-      "-X / BACK",
-      "+Y / LEFT",
-      "+X / FRONT",
-      "-Y / RIGHT"
-    };
-
-    std::fprintf(
-      stderr,
-      "[RGB-LIDAR CPU] panorama=%dx%d row=%d\n",
-      rgbWidth,
-      rgbHeight,
-      y);
-
-    for (int i = 0; i < 4; ++i) {
-      const int x = columns[i];
-
-      const int index =
-        4 * (y * rgbWidth + x);
-
-      const unsigned char b =
-        rgbPanorama[index + 0];
-
-      const unsigned char g =
-        rgbPanorama[index + 1];
-
-      const unsigned char r =
-        rgbPanorama[index + 2];
-
-      const unsigned char a =
-        rgbPanorama[index + 3];
-
-      std::fprintf(
-        stderr,
-        "[RGB-LIDAR CPU] "
-        "x=%d dir=%s "
-        "BGRA=(%u,%u,%u,%u) "
-        "RGB=(%u,%u,%u)\n",
-        x,
-        directions[i],
-        static_cast<unsigned int>(b),
-        static_cast<unsigned int>(g),
-        static_cast<unsigned int>(r),
-        static_cast<unsigned int>(a),
-        static_cast<unsigned int>(r),
-        static_cast<unsigned int>(g),
-        static_cast<unsigned int>(b));
-    }
-
-    delete[] rgbPanorama;
-
-    rgbCpuReadbackPrinted = true;
-  }
+  mWrenCamera->copyLidarRgbContentsToMemory(mTemporaryRgbImage);
   // if rotating compute which part of the image should be updated
   if (mIsActuallyRotating) {
     double deltaAngle = fabs(mCurrentRotatingAngle - mPreviousRotatingAngle);
@@ -492,6 +454,117 @@ void WbLidar::copyAllLayersToMemoryMappedFile() {
                sizeof(float) * abs(maxWidth + widthOffset));
       }
     }
+  }
+
+  // RGB-LiDAR:
+  // Use exactly the same vertical source-row mapping
+  // as the range image.
+  //
+  // The final target is currently the non-rotating
+  // fixed LiDAR, so rotating RGB accumulation will be
+  // handled separately later.
+  if (!mIsActuallyRotating) {
+    const int rgbBytesPerPixel = 4;
+
+    for (int layer = 0;
+        layer < actualNumberOfLayers();
+        ++layer) {
+
+      const int sourceRow =
+        static_cast<int>(layer * skip);
+
+      const unsigned char *source =
+        mTemporaryRgbImage +
+        rgbBytesPerPixel *
+          sourceRow *
+          width();
+
+      unsigned char *destination =
+        mRgbImage +
+        rgbBytesPerPixel *
+          layer *
+          resolution;
+
+      memcpy(
+        destination,
+        source,
+        rgbBytesPerPixel *
+          resolution);
+    }
+  }
+
+  static bool rgbLayerSamplingPrinted = false;
+
+  if (!rgbLayerSamplingPrinted &&
+      !mIsActuallyRotating) {
+
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR LAYERS] "
+      "panorama=%dx%d final=%dx%d "
+      "skip=%.6f\n",
+      width(),
+      height(),
+      resolution,
+      actualNumberOfLayers(),
+      skip);
+
+    for (int layer = 0;
+        layer < actualNumberOfLayers();
+        ++layer) {
+
+      const int sourceRow =
+        static_cast<int>(layer * skip);
+
+      std::fprintf(
+        stderr,
+        "[RGB-LIDAR LAYERS] "
+        "layer=%d sourceRow=%d\n",
+        layer,
+        sourceRow);
+    }
+
+    // Layer 3 is useful in our 6-layer tests because
+    // it maps to panorama row 5.
+    const int testLayer =
+      actualNumberOfLayers() / 2;
+
+    const int columns[] = {
+      0,
+      resolution / 4,
+      resolution / 2,
+      3 * resolution / 4
+    };
+
+    for (int i = 0; i < 4; ++i) {
+      const int x = columns[i];
+
+      const int index =
+        4 *
+        (testLayer * resolution + x);
+
+      const unsigned char b =
+        mRgbImage[index + 0];
+
+      const unsigned char g =
+        mRgbImage[index + 1];
+
+      const unsigned char r =
+        mRgbImage[index + 2];
+
+      std::fprintf(
+        stderr,
+        "[RGB-LIDAR LAYERS] "
+        "layer=%d x=%d "
+        "RGB=(%u,%u,%u)\n",
+        testLayer,
+        x,
+        static_cast<unsigned int>(r),
+        static_cast<unsigned int>(g),
+        static_cast<unsigned int>(b));
+    }
+
+    rgbLayerSamplingPrinted = true;
   }
 
   if (mIsPointCloudEnabled) {
