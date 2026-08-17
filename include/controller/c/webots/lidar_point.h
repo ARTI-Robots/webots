@@ -27,6 +27,12 @@ typedef struct {
   float z;
   int layer_id;
   float time;
+
+  // RGB-LiDAR color associated with this exact LiDAR point.
+  unsigned char r;
+  unsigned char g;
+  unsigned char b;
+  unsigned char a;
 } WbLidarPoint;
 
 #endif /* WB_LIDAR_POINT_H */

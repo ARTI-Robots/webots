@@ -16,6 +16,8 @@ int main(int argc, char **argv) {
     lidar,
     time_step);
 
+  wb_lidar_enable_point_cloud(lidar);
+
   int step_count = 0;
   int printed = 0;
 

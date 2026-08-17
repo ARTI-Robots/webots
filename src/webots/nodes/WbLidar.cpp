@@ -687,6 +687,32 @@ void WbLidar::updatePointCloud(int minWidth, int maxWidth) {
       lidarPoints[index].z = r * sinPhi;
       lidarPoints[index].time = t;
       lidarPoints[index].layer_id = i;
+      // RGB-LiDAR:
+      // mRgbImage and the point cloud use the same flattened
+      // [layer][column] sample index.
+      //
+      // WREN framebuffer readback is BGRA, while WbLidarPoint
+      // exposes conventional RGBA ordering.
+      if (!mIsActuallyRotating && mRgbImage) {
+        const int rgbIndex = 4 * index;
+
+        lidarPoints[index].r =
+          mRgbImage[rgbIndex + 2];
+
+        lidarPoints[index].g =
+          mRgbImage[rgbIndex + 1];
+
+        lidarPoints[index].b =
+          mRgbImage[rgbIndex + 0];
+
+        lidarPoints[index].a =
+          mRgbImage[rgbIndex + 3];
+      } else {
+        lidarPoints[index].r = 0;
+        lidarPoints[index].g = 0;
+        lidarPoints[index].b = 0;
+        lidarPoints[index].a = 255;
+      }
       t += dt;
 
       double cosTheta_tmp = cosTheta * cosdTheta - sinTheta * sindTheta;
@@ -698,6 +724,54 @@ void WbLidar::updatePointCloud(int minWidth, int maxWidth) {
     double sinPhi_tmp = sinPhi * cosdPhi + cosPhi * sindPhi;
     cosPhi = cosPhi_tmp;
     sinPhi = sinPhi_tmp;
+  }
+  // RGB-LiDAR point-level correspondence diagnostic.
+  static bool rgbPointCloudPrinted = false;
+
+  if (!rgbPointCloudPrinted &&
+      !mIsActuallyRotating &&
+      numberOfLayers >= 4 &&
+      resolution >= 132 &&
+      minWidth == 0 &&
+      maxWidth >= 132) {
+
+    const int testLayer =
+      numberOfLayers / 2;
+
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR POINT] "
+      "layer=%d boundary columns 124..131\n",
+      testLayer);
+
+    for (int column = 124;
+        column <= 131;
+        ++column) {
+
+      const int pointIndex =
+        testLayer * resolution + column;
+
+      const WbLidarPoint &point =
+        lidarPoints[pointIndex];
+
+      std::fprintf(
+        stderr,
+        "[RGB-LIDAR POINT] "
+        "layer=%d column=%d "
+        "XYZ=(%.6f,%.6f,%.6f) "
+        "RGBA=(%u,%u,%u,%u)\n",
+        testLayer,
+        column,
+        point.x,
+        point.y,
+        point.z,
+        static_cast<unsigned int>(point.r),
+        static_cast<unsigned int>(point.g),
+        static_cast<unsigned int>(point.b),
+        static_cast<unsigned int>(point.a));
+    }
+
+    rgbPointCloudPrinted = true;
   }
 }
 
