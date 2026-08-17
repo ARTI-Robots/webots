@@ -567,6 +567,64 @@ void WbLidar::copyAllLayersToMemoryMappedFile() {
     rgbLayerSamplingPrinted = true;
   }
 
+  static bool rgbFinalBoundaryPrinted = false;
+
+  if (!rgbFinalBoundaryPrinted &&
+      !mIsActuallyRotating &&
+      actualHorizontalResolution() >= 132 &&
+      actualNumberOfLayers() >= 4) {
+
+    const int testLayer =
+      actualNumberOfLayers() / 2;
+
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR FINAL] "
+      "layer=%d boundary columns 124..131\n",
+      testLayer);
+
+    for (int column = 124;
+        column <= 131;
+        ++column) {
+
+      const int index =
+        4 *
+        (testLayer *
+          actualHorizontalResolution() +
+        column);
+
+      const unsigned char b =
+        mRgbImage[index + 0];
+
+      const unsigned char g =
+        mRgbImage[index + 1];
+
+      const unsigned char r =
+        mRgbImage[index + 2];
+
+      const unsigned char a =
+        mRgbImage[index + 3];
+
+      std::fprintf(
+        stderr,
+        "[RGB-LIDAR FINAL] "
+        "layer=%d column=%d "
+        "BGRA=(%u,%u,%u,%u) "
+        "RGB=(%u,%u,%u)\n",
+        testLayer,
+        column,
+        static_cast<unsigned int>(b),
+        static_cast<unsigned int>(g),
+        static_cast<unsigned int>(r),
+        static_cast<unsigned int>(a),
+        static_cast<unsigned int>(r),
+        static_cast<unsigned int>(g),
+        static_cast<unsigned int>(b));
+    }
+
+    rgbFinalBoundaryPrinted = true;
+  }
+
   if (mIsPointCloudEnabled) {
     if (WbWorld::instance()->perspective()->isGlobalOptionalRenderingEnabled("LidarPointClouds"))
       displayPointCloud();
