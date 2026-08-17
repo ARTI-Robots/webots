@@ -89,6 +89,7 @@ enum SHADER {
   SHADER_LIGHT_REPRESENTATION,
   SHADER_LINE_SET,
   SHADER_MERGE_SPHERICAL,
+  SHADER_MERGE_SPHERICAL_PACKED_RGB,
   SHADER_PACK_RGB_RANGE,
   SHADER_MOTION_BLUR,
   SHADER_NOISE_MASK,
@@ -760,6 +761,90 @@ WrShaderProgram *WbWrenShaders::mergeSphericalShader() {
   }
 
   return gShaders[SHADER_MERGE_SPHERICAL];
+}
+
+WrShaderProgram *WbWrenShaders::mergeSphericalPackedRgbShader() {
+  if (!gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB]) {
+    gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB] =
+      wr_shader_program_new();
+
+    wr_shader_program_use_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      WR_GLSL_LAYOUT_UNIFORM_TEXTURE0);
+
+    wr_shader_program_use_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      WR_GLSL_LAYOUT_UNIFORM_TEXTURE1);
+
+    wr_shader_program_use_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      WR_GLSL_LAYOUT_UNIFORM_TEXTURE2);
+
+    wr_shader_program_use_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      WR_GLSL_LAYOUT_UNIFORM_TEXTURE3);
+
+    wr_shader_program_use_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      WR_GLSL_LAYOUT_UNIFORM_TEXTURE4);
+
+    wr_shader_program_use_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      WR_GLSL_LAYOUT_UNIFORM_TEXTURE5);
+
+    const bool defaultBool = false;
+
+    wr_shader_program_create_custom_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      "rangeCamera",
+      WR_SHADER_PROGRAM_UNIFORM_TYPE_BOOL,
+      reinterpret_cast<const char *>(&defaultBool));
+
+    wr_shader_program_create_custom_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      "cylindrical",
+      WR_SHADER_PROGRAM_UNIFORM_TYPE_BOOL,
+      reinterpret_cast<const char *>(&defaultBool));
+
+    const float defaultFloat = 0.0f;
+
+    wr_shader_program_create_custom_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      "minRange",
+      WR_SHADER_PROGRAM_UNIFORM_TYPE_FLOAT,
+      reinterpret_cast<const char *>(&defaultFloat));
+
+    wr_shader_program_create_custom_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      "maxRange",
+      WR_SHADER_PROGRAM_UNIFORM_TYPE_FLOAT,
+      reinterpret_cast<const char *>(&defaultFloat));
+
+    wr_shader_program_create_custom_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      "fovX",
+      WR_SHADER_PROGRAM_UNIFORM_TYPE_FLOAT,
+      reinterpret_cast<const char *>(&defaultFloat));
+
+    wr_shader_program_create_custom_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      "fovY",
+      WR_SHADER_PROGRAM_UNIFORM_TYPE_FLOAT,
+      reinterpret_cast<const char *>(&defaultFloat));
+
+    wr_shader_program_create_custom_uniform(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      "fovYCorrectionCoefficient",
+      WR_SHADER_PROGRAM_UNIFORM_TYPE_FLOAT,
+      reinterpret_cast<const char *>(&defaultFloat));
+
+    ::buildShader(
+      gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB],
+      QFileInfo("gl:shaders/pass_through.vert"),
+      QFileInfo("gl:shaders/merge_spherical_rgb_packed.frag"));
+  }
+
+  return gShaders[SHADER_MERGE_SPHERICAL_PACKED_RGB];
 }
 
 WrShaderProgram *WbWrenShaders::packRgbRangeShader() {

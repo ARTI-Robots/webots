@@ -1093,11 +1093,10 @@ void WbWrenCamera::setupLidarRgbMergeEffect() {
     return;
 
   mLidarRgbMergeEffect =
-    WbWrenPostProcessingEffects::sphericalCameraMerge(
-      mWidth,
-      mHeight,
-      CAMERA_ORIENTATION_COUNT,
-      WR_TEXTURE_INTERNAL_FORMAT_RGBA8);
+  WbWrenPostProcessingEffects::sphericalPackedRgbMerge(
+    mWidth,
+    mHeight,
+    CAMERA_ORIENTATION_COUNT);
 
   wr_post_processing_effect_set_result_frame_buffer(
     mLidarRgbMergeEffect,
@@ -1120,6 +1119,8 @@ void WbWrenCamera::applyLidarRgbMergeEffect() {
       !mLidarMergedRgbFrameBuffer)
     return;
 
+  WrShaderProgram *packedRgbMergeShader = WbWrenShaders::mergeSphericalPackedRgbShader();
+
   //
   // The same shader is also used by the normal LiDAR
   // range merge. Override its uniforms for RGB mode.
@@ -1127,7 +1128,7 @@ void WbWrenCamera::applyLidarRgbMergeEffect() {
   const bool isRangeCamera = false;
 
   wr_shader_program_set_custom_uniform_value(
-    WbWrenShaders::mergeSphericalShader(),
+    packedRgbMergeShader,
     "rangeCamera",
     WR_SHADER_PROGRAM_UNIFORM_TYPE_BOOL,
     reinterpret_cast<const char *>(&isRangeCamera));
@@ -1136,37 +1137,37 @@ void WbWrenCamera::applyLidarRgbMergeEffect() {
     mProjection == CYLINDRICAL_PROJECTION;
 
   wr_shader_program_set_custom_uniform_value(
-    WbWrenShaders::mergeSphericalShader(),
+    packedRgbMergeShader,
     "cylindrical",
     WR_SHADER_PROGRAM_UNIFORM_TYPE_BOOL,
     reinterpret_cast<const char *>(&isCylindrical));
 
   wr_shader_program_set_custom_uniform_value(
-    WbWrenShaders::mergeSphericalShader(),
+    packedRgbMergeShader,
     "minRange",
     WR_SHADER_PROGRAM_UNIFORM_TYPE_FLOAT,
     reinterpret_cast<const char *>(&mMinRange));
 
   wr_shader_program_set_custom_uniform_value(
-    WbWrenShaders::mergeSphericalShader(),
+    packedRgbMergeShader,
     "maxRange",
     WR_SHADER_PROGRAM_UNIFORM_TYPE_FLOAT,
     reinterpret_cast<const char *>(&mMaxRange));
 
   wr_shader_program_set_custom_uniform_value(
-    WbWrenShaders::mergeSphericalShader(),
+    packedRgbMergeShader,
     "fovX",
     WR_SHADER_PROGRAM_UNIFORM_TYPE_FLOAT,
     reinterpret_cast<const char *>(&mSphericalFieldOfViewX));
 
   wr_shader_program_set_custom_uniform_value(
-    WbWrenShaders::mergeSphericalShader(),
+    packedRgbMergeShader,
     "fovY",
     WR_SHADER_PROGRAM_UNIFORM_TYPE_FLOAT,
     reinterpret_cast<const char *>(&mSphericalFieldOfViewY));
 
   wr_shader_program_set_custom_uniform_value(
-    WbWrenShaders::mergeSphericalShader(),
+    packedRgbMergeShader,
     "fovYCorrectionCoefficient",
     WR_SHADER_PROGRAM_UNIFORM_TYPE_FLOAT,
     reinterpret_cast<const char *>(
@@ -1175,21 +1176,29 @@ void WbWrenCamera::applyLidarRgbMergeEffect() {
   WrPostProcessingEffectPass *mergePass =
     wr_post_processing_effect_get_pass(
       mLidarRgbMergeEffect,
-      "MergeSpherical");
+      "MergeSphericalPackedRgb");
+
+  if (!mergePass) {
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR MERGE] ERROR: "
+      "MergeSphericalPackedRgb pass not found\n");
+    return;
+  }
 
   for (int i = 0;
-       i < CAMERA_ORIENTATION_COUNT;
-       ++i) {
+      i < CAMERA_ORIENTATION_COUNT;
+      ++i) {
 
     if (mIsCameraActive[i] &&
-        mLidarRgbFrameBuffer[i]) {
+        mLidarPackedFrameBuffer[i]) {
 
       wr_post_processing_effect_pass_set_input_texture(
         mergePass,
         i,
         WR_TEXTURE(
           wr_frame_buffer_get_output_texture(
-            mLidarRgbFrameBuffer[i],
+            mLidarPackedFrameBuffer[i],
             0)));
     } else {
       wr_post_processing_effect_pass_set_input_texture(
@@ -1201,6 +1210,7 @@ void WbWrenCamera::applyLidarRgbMergeEffect() {
 
   wr_post_processing_effect_apply(
     mLidarRgbMergeEffect);
+
   static bool debugMergedPixelsPrinted = false;
 
   if (!debugMergedPixelsPrinted) {
@@ -1251,6 +1261,33 @@ void WbWrenCamera::applyLidarRgbMergeEffect() {
         static_cast<int>(pixel[0]));
     }
 
+    std::fprintf(
+    stderr,
+    "[RGB-LIDAR BOUNDARY] panorama row=%d\n",
+    y);
+
+  for (int xBoundary = 124;
+       xBoundary <= 131;
+       ++xBoundary) {
+    unsigned char pixel[4] = {0, 0, 0, 0};
+
+    wr_frame_buffer_copy_pixel(
+      mLidarMergedRgbFrameBuffer,
+      0,
+      xBoundary,
+      y,
+      pixel,
+      false);
+
+    std::fprintf(
+      stderr,
+      "[RGB-LIDAR BOUNDARY] "
+      "x=%d RGB=(%d,%d,%d)\n",
+      xBoundary,
+      static_cast<int>(pixel[2]),
+      static_cast<int>(pixel[1]),
+      static_cast<int>(pixel[0]));
+  }
     debugMergedPixelsPrinted = true;
   }
 }

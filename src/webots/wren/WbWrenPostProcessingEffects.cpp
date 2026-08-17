@@ -156,6 +156,70 @@ WrPostProcessingEffect *WbWrenPostProcessingEffects::sphericalCameraMerge(float 
   return sphericalMerge;
 }
 
+WrPostProcessingEffect *
+WbWrenPostProcessingEffects::sphericalPackedRgbMerge(
+  float width,
+  float height,
+  int cameraCount) {
+
+  WrPostProcessingEffect *effect =
+    wr_post_processing_effect_new();
+
+  wr_post_processing_effect_set_drawing_index(
+    effect,
+    WbWrenRenderingContext::PP_SPHERICAL_CAMERA_MERGE);
+
+  WrPostProcessingEffectPass *mergePass =
+    wr_post_processing_effect_pass_new();
+
+  wr_post_processing_effect_pass_set_name(
+    mergePass,
+    "MergeSphericalPackedRgb");
+
+  wr_post_processing_effect_pass_set_program(
+    mergePass,
+    WbWrenShaders::mergeSphericalPackedRgbShader());
+
+  wr_post_processing_effect_pass_set_output_size(
+    mergePass,
+    width,
+    height);
+
+  wr_post_processing_effect_pass_set_alpha_blending(
+    mergePass,
+    false);
+
+  wr_post_processing_effect_pass_set_input_texture_count(
+    mergePass,
+    cameraCount);
+
+  for (int i = 0; i < cameraCount; ++i) {
+    wr_post_processing_effect_pass_set_input_texture_wrap_mode(
+      mergePass,
+      i,
+      WR_TEXTURE_WRAP_MODE_CLAMP_TO_EDGE);
+  }
+
+  wr_post_processing_effect_pass_set_output_texture_count(
+    mergePass,
+    1);
+
+  wr_post_processing_effect_pass_set_output_texture_format(
+    mergePass,
+    0,
+    WR_TEXTURE_INTERNAL_FORMAT_RGBA8);
+
+  wr_post_processing_effect_append_pass(
+    effect,
+    mergePass);
+
+  wr_post_processing_effect_set_result_program(
+    effect,
+    WbWrenShaders::passThroughShader());
+
+  return effect;
+}
+
 WrPostProcessingEffect *WbWrenPostProcessingEffects::packRgbRange(float width, float height) {
 
   WrPostProcessingEffect *effect =
