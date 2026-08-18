@@ -1,0 +1,39 @@
+#VRML_SIM R2025a utf8
+
+PROTO RgbdLidar [
+  field SFVec3f    translation          0 0 0
+  field SFRotation rotation             0 0 1 0
+  field SFString   name                 "lidar"
+
+  field SFInt32    horizontalResolution 1024
+  field SFFloat    fieldOfView          6.283185307179586
+  field SFFloat    verticalFieldOfView  0.2
+  field SFInt32    numberOfLayers       32
+
+  field SFFloat    frequency            10
+  field SFFloat    near                 0.05
+  field SFFloat    minRange             0.05
+  field SFFloat    maxRange             5
+  field SFFloat    noise                0
+] {
+  Lidar {
+    translation IS translation
+    rotation IS rotation
+    name IS name
+
+    horizontalResolution IS horizontalResolution
+    fieldOfView IS fieldOfView
+    verticalFieldOfView IS verticalFieldOfView
+    numberOfLayers IS numberOfLayers
+
+    frequency IS frequency
+    near IS near
+    minRange IS minRange
+    maxRange IS maxRange
+    noise IS noise
+
+    type "fixed"
+    projection "cylindrical"
+    resolution -1
+  }
+}
