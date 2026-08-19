@@ -1,0 +1,53 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "../../../generic/rgbd_lidar/protos/RgbdLidar.proto"
+
+PROTO OusterOS0Rev8 [
+  field SFVec3f    translation          0 0 0
+  field SFRotation rotation             0 0 1 0
+  field SFString   name                 "ouster_os0_rev8"
+  field SFString   lidarName            "lidar"
+
+  field SFInt32    horizontalResolution 1024
+  field SFInt32    numberOfLayers       128
+  field SFFloat    minRange             0.5
+  field SFFloat    maxRange             75
+  field SFFloat    noise                0
+] {
+  Solid {
+    translation IS translation
+    rotation IS rotation
+    name IS name
+
+    children [
+      Shape {
+	castShadows FALSE
+        appearance PBRAppearance {
+          baseColor 0.3 0.3 0.3
+          roughness 0.5
+          metalness 0
+        }
+        geometry Mesh {
+          url [
+            "../meshes/os0/os0_rev8_visual.obj"
+          ]
+        }
+      }
+
+      RgbdLidar {
+        translation 0 0 0.040242
+        name IS lidarName
+
+        horizontalResolution IS horizontalResolution
+        fieldOfView 6.283185307179586
+        verticalFieldOfView 1.5707963267948966
+        numberOfLayers IS numberOfLayers
+
+        near 0.01
+        minRange IS minRange
+        maxRange IS maxRange
+        noise IS noise
+      }
+    ]
+  }
+}

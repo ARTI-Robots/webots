@@ -10,7 +10,6 @@ PROTO RgbdLidar [
   field SFFloat    verticalFieldOfView  0.2
   field SFInt32    numberOfLayers       32
 
-  field SFFloat    frequency            10
   field SFFloat    near                 0.05
   field SFFloat    minRange             0.05
   field SFFloat    maxRange             5
@@ -26,7 +25,6 @@ PROTO RgbdLidar [
     verticalFieldOfView IS verticalFieldOfView
     numberOfLayers IS numberOfLayers
 
-    frequency IS frequency
     near IS near
     minRange IS minRange
     maxRange IS maxRange

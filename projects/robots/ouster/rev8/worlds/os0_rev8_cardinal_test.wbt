@@ -1,0 +1,132 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "../protos/OusterOS0Rev8.proto"
+EXTERNPROTO "../../../../objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "../../../../objects/backgrounds/protos/TexturedBackgroundLight.proto"
+
+WorldInfo {
+  basicTimeStep 16
+}
+
+Viewpoint {
+  position 0.35 -0.35 0.25
+  orientation 0.37 0.89 0.26 1.48
+}
+
+TexturedBackground {
+}
+
+TexturedBackgroundLight {
+}
+
+Solid {
+  translation 1 0 0.5
+  name "positive_x_red_wall"
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 1 0 0
+        roughness 1
+        metalness 0
+      }
+      geometry Box {
+        size 0.05 1.5 1
+      }
+    }
+  ]
+  boundingObject Box {
+    size 0.05 1.5 1
+  }
+}
+
+Solid {
+  translation -1 0 0.5
+  name "negative_x_blue_wall"
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0 0 1
+        roughness 1
+        metalness 0
+      }
+      geometry Box {
+        size 0.05 1.5 1
+      }
+    }
+  ]
+  boundingObject Box {
+    size 0.05 1.5 1
+  }
+}
+
+Solid {
+  translation 0 1 0.5
+  name "positive_y_green_wall"
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0 1 0
+        roughness 1
+        metalness 0
+      }
+      geometry Box {
+        size 1.5 0.05 1
+      }
+    }
+  ]
+  boundingObject Box {
+    size 1.5 0.05 1
+  }
+}
+
+Solid {
+  translation 0 -1 0.5
+  name "negative_y_yellow_wall"
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 1 1 0
+        roughness 1
+        metalness 0
+      }
+      geometry Box {
+        size 1.5 0.05 1
+      }
+    }
+  ]
+  boundingObject Box {
+    size 1.5 0.05 1
+  }
+}
+
+Solid {
+  translation 0 0 -0.025
+  name "floor"
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.5 0.5 0.5
+        roughness 0.8
+      }
+      geometry Box {
+        size 1 1 0.05
+      }
+    }
+  ]
+  boundingObject Box {
+    size 1 1 0.05
+  }
+}
+
+Robot {
+  translation 0 0 0.0225
+  name "os0_test_robot"
+  controller "os0_lidar_test"
+
+  children [
+    OusterOS0Rev8 {
+      name "os0"
+      lidarName "lidar"
+    }
+  ]
+}
