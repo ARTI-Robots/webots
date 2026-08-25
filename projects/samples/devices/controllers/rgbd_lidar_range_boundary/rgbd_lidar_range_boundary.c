@@ -28,9 +28,6 @@ int main(int argc, char **argv) {
       const int layers =
         wb_lidar_get_number_of_layers(lidar);
 
-      // For 6 layers this is layer 3.
-      // Earlier diagnostics showed layer 3 maps
-      // to merged panorama row 5.
       const int layer = layers / 2;
 
       const float *image =
