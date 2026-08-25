@@ -719,15 +719,6 @@ void WbWrenCamera::setupLidarRgbTargets() {
   if (mType != 'l' || isPlanarProjection())
     return;
 
-  const char *orientationNames[] = {
-    "FRONT",
-    "RIGHT",
-    "BACK",
-    "LEFT",
-    "UP",
-    "DOWN"
-  };
-
   for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
     if (!mIsCameraActive[i] || !mCamera[i])
       continue;
@@ -827,20 +818,7 @@ void WbWrenCamera::setupLidarRgbTargets() {
       mLidarRgbFrameBuffer[i],
       0,
       true);
-
-    std::fprintf(
-      stderr,
-      "[RGB-LIDAR SHARED] "
-      "%-5s RGB target created: "
-      "size=%dx%d camera=%p "
-      "viewport=%p framebuffer=%p\n",
-      orientationNames[i],
-      mSubCamerasResolutionX,
-      mSubCamerasResolutionY,
-      reinterpret_cast<void *>(mCamera[i]),
-      reinterpret_cast<void *>(mLidarRgbViewport[i]),
-      reinterpret_cast<void *>(mLidarRgbFrameBuffer[i]));
-  }
+    }
 }
 
 void WbWrenCamera::setupLidarMergedRgbTarget() {
@@ -876,29 +854,11 @@ void WbWrenCamera::setupLidarMergedRgbTarget() {
     mLidarMergedRgbFrameBuffer,
     0,
     true);
-
-  std::fprintf(
-    stderr,
-    "[RGB-LIDAR MERGE] RGB panorama target created: "
-    "size=%dx%d framebuffer=%p texture=%p\n",
-    mWidth,
-    mHeight,
-    reinterpret_cast<void *>(mLidarMergedRgbFrameBuffer),
-    reinterpret_cast<void *>(colorTexture));
-}
+  }
 
 void WbWrenCamera::setupLidarPackedTargets() {
   if (mType != 'l' || isPlanarProjection())
     return;
-
-  const char *orientationNames[] = {
-    "FRONT",
-    "RIGHT",
-    "BACK",
-    "LEFT",
-    "UP",
-    "DOWN"
-  };
 
   for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
     if (!mIsCameraActive[i] ||
@@ -948,18 +908,6 @@ void WbWrenCamera::setupLidarPackedTargets() {
 
     wr_post_processing_effect_setup(
       mLidarPackEffect[i]);
-
-    std::fprintf(
-      stderr,
-      "[RGB-LIDAR PACK] %-5s target created: "
-      "size=%dx%d framebuffer=%p effect=%p\n",
-      orientationNames[i],
-      mSubCamerasResolutionX,
-      mSubCamerasResolutionY,
-      reinterpret_cast<void *>(
-        mLidarPackedFrameBuffer[i]),
-      reinterpret_cast<void *>(
-        mLidarPackEffect[i]));
   }
 }
 
@@ -972,8 +920,6 @@ void WbWrenCamera::applyLidarPackEffects() {
     "UP",
     "DOWN"
   };
-
-  static bool debugPackedPixelsPrinted = false;
 
   for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
     if (!mIsCameraActive[i] ||
@@ -1017,51 +963,7 @@ void WbWrenCamera::applyLidarPackEffects() {
 
     wr_post_processing_effect_apply(
       mLidarPackEffect[i]);
-
-    if (!debugPackedPixelsPrinted) {
-      const int x =
-        mSubCamerasResolutionX / 2;
-
-      const int y =
-        mSubCamerasResolutionY / 2;
-
-      float pixel[4] = {
-        0.0f,
-        0.0f,
-        0.0f,
-        0.0f
-      };
-
-      wr_frame_buffer_copy_pixel(
-        mLidarPackedFrameBuffer[i],
-        0,
-        x,
-        y,
-        pixel,
-        false);
-
-      std::fprintf(
-        stderr,
-        "[RGB-LIDAR PACK] %-5s center "
-        "x=%d y=%d "
-        "RGBA=(%.6f,%.6f,%.6f,%.6f) "
-        "RGB8~=(%d,%d,%d) "
-        "rawRange=%.6f\n",
-        orientationNames[i],
-        x,
-        y,
-        pixel[0],
-        pixel[1],
-        pixel[2],
-        pixel[3],
-        static_cast<int>(pixel[0] * 255.0f),
-        static_cast<int>(pixel[1] * 255.0f),
-        static_cast<int>(pixel[2] * 255.0f),
-        pixel[3]);
-    }
   }
-
-  debugPackedPixelsPrinted = true;
 }
 
 void WbWrenCamera::cleanupLidarPackedTargets() {
@@ -1121,14 +1023,6 @@ void WbWrenCamera::setupLidarRgbMergeEffect() {
 
   wr_post_processing_effect_setup(
     mLidarRgbMergeEffect);
-
-  std::fprintf(
-    stderr,
-    "[RGB-LIDAR MERGE] RGB merge effect created: "
-    "output=%dx%d effect=%p\n",
-    mWidth,
-    mHeight,
-    reinterpret_cast<void *>(mLidarRgbMergeEffect));
 }
 
 void WbWrenCamera::applyLidarRgbMergeEffect() {
@@ -1224,90 +1118,9 @@ void WbWrenCamera::applyLidarRgbMergeEffect() {
         NULL);
     }
   }
-
   wr_post_processing_effect_apply(
     mLidarRgbMergeEffect);
-
-  static bool debugMergedPixelsPrinted = false;
-
-  if (!debugMergedPixelsPrinted) {
-    const int y =
-      mHeight / 2;
-
-    const int columns[] = {
-      0,
-      mWidth / 4,
-      mWidth / 2,
-      3 * mWidth / 4
-    };
-
-    const char *directions[] = {
-      "-X / BACK",
-      "+Y / LEFT",
-      "+X / FRONT",
-      "-Y / RIGHT"
-    };
-
-    for (int i = 0; i < 4; ++i) {
-      unsigned char pixel[4] =
-        {0, 0, 0, 0};
-
-      wr_frame_buffer_copy_pixel(
-        mLidarMergedRgbFrameBuffer,
-        0,
-        columns[i],
-        y,
-        pixel,
-        false);
-
-      std::fprintf(
-        stderr,
-        "[RGB-LIDAR PANORAMA] "
-        "x=%d y=%d dir=%s "
-        "rawBGRA=(%d,%d,%d,%d) "
-        "RGB=(%d,%d,%d)\n",
-        columns[i],
-        y,
-        directions[i],
-        static_cast<int>(pixel[0]),
-        static_cast<int>(pixel[1]),
-        static_cast<int>(pixel[2]),
-        static_cast<int>(pixel[3]),
-        static_cast<int>(pixel[2]),
-        static_cast<int>(pixel[1]),
-        static_cast<int>(pixel[0]));
-    }
-
-    std::fprintf(
-    stderr,
-    "[RGB-LIDAR BOUNDARY] panorama row=%d\n",
-    y);
-
-  for (int xBoundary = 124;
-       xBoundary <= 131;
-       ++xBoundary) {
-    unsigned char pixel[4] = {0, 0, 0, 0};
-
-    wr_frame_buffer_copy_pixel(
-      mLidarMergedRgbFrameBuffer,
-      0,
-      xBoundary,
-      y,
-      pixel,
-      false);
-
-    std::fprintf(
-      stderr,
-      "[RGB-LIDAR BOUNDARY] "
-      "x=%d RGB=(%d,%d,%d)\n",
-      xBoundary,
-      static_cast<int>(pixel[2]),
-      static_cast<int>(pixel[1]),
-      static_cast<int>(pixel[0]));
   }
-    debugMergedPixelsPrinted = true;
-  }
-}
 
 void WbWrenCamera::setupCamera(int index, int width, int height) {
   mCamera[index] = wr_camera_new();
@@ -1743,59 +1556,4 @@ void WbWrenCamera::renderLidarRgbTargets() {
   applyLidarPackEffects();
 
   applyLidarRgbMergeEffect();
-
-  static bool debugPixelsPrinted = false;
-
-  if (!debugPixelsPrinted) {
-    const char *orientationNames[] = {
-      "FRONT",
-      "RIGHT",
-      "BACK",
-      "LEFT",
-      "UP",
-      "DOWN"
-    };
-
-    const int x =
-      mSubCamerasResolutionX / 2;
-
-    const int y =
-      mSubCamerasResolutionY / 2;
-
-    for (int i = 0; i < CAMERA_ORIENTATION_COUNT; ++i) {
-      if (!mIsCameraActive[i] ||
-          !mLidarRgbFrameBuffer[i])
-        continue;
-
-      unsigned char pixel[4] =
-        {0, 0, 0, 0};
-
-      wr_frame_buffer_copy_pixel(
-        mLidarRgbFrameBuffer[i],
-        0,
-        x,
-        y,
-        pixel,
-        false);
-
-      std::fprintf(
-        stderr,
-        "[RGB-LIDAR SHARED] "
-        "%-5s center x=%d y=%d "
-        "rawBGRA=(%d,%d,%d,%d) "
-        "RGB=(%d,%d,%d)\n",
-        orientationNames[i],
-        x,
-        y,
-        static_cast<int>(pixel[0]),
-        static_cast<int>(pixel[1]),
-        static_cast<int>(pixel[2]),
-        static_cast<int>(pixel[3]),
-        static_cast<int>(pixel[2]),
-        static_cast<int>(pixel[1]),
-        static_cast<int>(pixel[0]));
-    }
-
-    debugPixelsPrinted = true;
-  }
 }
